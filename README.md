@@ -15,3 +15,12 @@ This node allows you to quickly adjust the lights images within ComfyUI. It runs
 
 ## How to use
 Simply connect your image input, adjust the sliders, and get your processed result instantly.
+
+## Install
+Install ComfyUI node from GitHub
+
+Download ZIP from GitHub
+Extract it folder to:
+ComfyUI/custom_nodes/
+
+Restart ComfyUI
