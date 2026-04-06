@@ -1,17 +1,17 @@
 # comfyui-msxyz
-AdvancedColorAdjustment
+LightExplosion
 
 # ComfyUI Color Adjustment Node
 
-This node allows you to quickly adjust the brightness, contrast, saturation, and gamma of your images within ComfyUI. It runs efficiently on the GPU using native PyTorch operations.
+This node allows you to quickly adjust the lights images within ComfyUI. It runs efficiently on the GPU using native PyTorch operations.
 
-![Node Preview](AdvancedColorAdjustment.png)
+![Node Preview](LightExplosion.png)
 
 ## Features
-- **Brightness:** Adjust the overall lightness of the image.
-- **Contrast:** Enhance or reduce the tonal range.
-- **Saturation:** Control the intensity of colors.
-- **Gamma:** Fine-tune mid-tones for better color balance.
+- **Bloom:** Adjust the overall bloom of the image.
+- **Glow:** Enhance or reduce the tonal range.
+- **Explosion:** Control the intensity of gamma.
+- **Rays:** Fine-tune mid-tones for better lights balance.
 
 ## How to use
 Simply connect your image input, adjust the sliders, and get your processed result instantly.
