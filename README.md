@@ -20,4 +20,5 @@ Simply connect your image input, adjust the sliders, and get the processed resul
 Install the ComfyUI node from GitHub:
 
 1. Download the ZIP file from GitHub
-2. Extract it into:
+2. Extract it into: ComfyUI\custom_nodes
+3. Restart ComfyUI
