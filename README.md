@@ -12,8 +12,9 @@ Detail Preservation: Keeps faces, textures, and backgrounds sharp while smoothin
 Adaptive Blending: Smoothly transitions between the original image and the anti-aliased edges.
 
 # Compare
-<p align="center">
-  <img src="Compare.png" width="400">
+<p align="center" style="display: flex; justify-content: center; gap: 10px;">
+  <img src="Compare.png" width="380">
+  <img src="Compare2.png" width="480">
 </p>
 
 # Installation
