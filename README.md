@@ -10,7 +10,6 @@ AI video generation often suffers from "pixel crawling" or "staircase effects" (
 Smart Edge Detection: Uses mathematical gradients to find jagged boundaries.
 Detail Preservation: Keeps faces, textures, and backgrounds sharp while smoothing only the "noisy" edges.
 Adaptive Blending: Smoothly transitions between the original image and the anti-aliased edges.
-Native Batch Support: Optimized for video workflows and large image batches.
 
 # Compare
 <p align="center">
