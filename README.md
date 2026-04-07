@@ -1,7 +1,7 @@
 # comfyui-msxyz
 🚀 Video Adaptive Anti-Aliasing
 
-# ComfyUI Anti-Aliasing Node
+# Anti-Aliasing Node
 A professional-grade, edge-aware anti-aliasing post-processing node for ComfyUI. This node is specifically designed to eliminate jagged edges (aliasing) in AI-generated videos and images without sacrificing overall texture detail.
 
 📝 Description
