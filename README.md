@@ -17,8 +17,7 @@ Native Batch Support: Optimized for video workflows and large image batches.
 
 🛠 Installation
 Navigate to your ComfyUI directory: ComfyUI/custom_nodes/.
-Create a new folder named MyCustomAA.
-Place the video_aa_node.py and __init__.py files into that folder.
+comfyui-msxyz files into that folder.
 Restart ComfyUI.
 
 🚀 Parameters & Usage
