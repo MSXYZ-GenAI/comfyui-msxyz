@@ -4,7 +4,9 @@ A professional-grade, edge-aware anti-aliasing post-processing node for ComfyUI.
 # Description
 AI video generation often suffers from "pixel crawling" or "staircase effects" (aliasing) on high-contrast edges. Traditional blur filters fix this by blurring the entire frame, which results in a loss of sharpness.
 
-![Node Preview](video_aa_node.png)
+<p align="center" style="display: flex; justify-content: center; gap: 10px;">
+  <img src="video_aa_node.png" width="480">
+</p>
 
 # Features
 Smart Edge Detection: Uses mathematical gradients to find jagged boundaries.
