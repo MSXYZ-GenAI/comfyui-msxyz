@@ -22,7 +22,7 @@ Place the video_aa_node.py and __init__.py files into that folder.
 Restart ComfyUI.
 
 🚀 Parameters & Usage
-Find the node under: CustomPostProcess -> 🚀 Video Adaptive Anti-Aliasing
+Find the node under: CustomPostProcess -> 
 Parameter	Type	Description	Recommended Value
 strength	FLOAT	The intensity of the smoothing effect.	0.8 - 1.2
 edge_threshold	FLOAT	Sensitivity of edge detection. Lower = more areas smoothed.	0.10 - 0.20
