@@ -1,11 +1,11 @@
-from .LightExplosion import LightExplosion
+from .VideoAdaptiveAA import VideoAdaptiveAA
 
 NODE_CLASS_MAPPINGS = {
-    "LightExplosion": LightExplosion
+    "VideoAdaptiveAA": VideoAdaptiveAA
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LightExplosion": "Color Correction & Adjustment"
+    "VideoAdaptiveAA": "🚀 Video Adaptive Anti-Aliasing"
 }
 
 
