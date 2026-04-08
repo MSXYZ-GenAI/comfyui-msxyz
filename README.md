@@ -18,9 +18,12 @@ Adaptive Blending: Smoothly transitions between the original image and the anti-
   <img src="Compare2.png" width="640">
 </p>
 
-# Installation
-Navigate to your ComfyUI directory: ComfyUI/custom_nodes/.
-comfyui-msxyz files into that folder.
+# Install Node
+Recommended Install via ComfyUI-Manager.<br>
+
+Manual Clone Repository<br>
+git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git<br>
+cd ComfyUI/custom_nodes/<br>
 Restart ComfyUI.
 
 # Parameters & Usage
