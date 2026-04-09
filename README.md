@@ -22,8 +22,8 @@ Adaptive Blending: Smoothly transitions between the original image and the anti-
 Recommended Install via ComfyUI-Manager.<br>
 
 Manual Clone Repository<br>
-git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git<br>
 cd ComfyUI/custom_nodes/<br>
+git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git<br>
 Restart ComfyUI.
 
 # Parameters & Usage
