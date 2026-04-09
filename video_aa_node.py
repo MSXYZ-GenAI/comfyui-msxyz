@@ -1,6 +1,7 @@
+# Created By MSXYZ and Claude 3 Opus
+# Optimized and Fixed
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 class VideoAdaptiveAA:
     def __init__(self):
@@ -34,11 +35,17 @@ class VideoAdaptiveAA:
         
         edges_x = F.conv2d(grayscale, sobel_x, padding=1)
         edges_y = F.conv2d(grayscale, sobel_y, padding=1)
-        edges = torch.sqrt(edges_x**2 + edges_y**2)
+        
+        # Sınır aşımını önlemek için ufak bir epsilon (1e-6) ekliyoruz (NaN hatalarını önler)
+        edges = torch.sqrt(edges_x**2 + edges_y**2 + 1e-6)
         
         # 3. Kenar maskesi oluşturma
         mask = (edges > edge_threshold).float()
         mask = mask * strength
+        
+        # KRİTİK DÜZELTME: Maske değerini 0.0 ile 1.0 arasına hapsediyoruz.
+        # Bu sayede strength > 1 olsa bile negatif renk patlamaları yaşanmaz.
+        mask = torch.clamp(mask, min=0.0, max=1.0)
         
         # 4. Bulanıklaştırma (Anti-aliasing etkisi)
         kernel_size = blur_radius * 2 + 1
