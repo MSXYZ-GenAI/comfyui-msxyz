@@ -16,6 +16,7 @@ Adaptive Blending: Smoothly transitions between the original image and the anti-
 # Compare
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
   <img src="Compare2.png" width="640">
+  <img src="Compare3.png" width="640">
 </p>
 
 # Install Node
