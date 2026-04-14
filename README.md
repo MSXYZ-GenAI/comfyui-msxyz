@@ -16,6 +16,7 @@ Edge-Aware Weighting: Intelligent blending to prevent blurring of fine details.
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
   <img src="Compare2.png" width="640">
   <img src="Compare3.png" width="640">
+  <img src="Compare4.png" width="640">
 </p>
 
 # Install Node
