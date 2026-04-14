@@ -26,18 +26,15 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 ### Compare
 
-**Scene Comparison**
+**Method Comparison (Portrait)**
 
-| Before | After |
 | :---: | :---: |
 | ![Scene Before](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare1.png?raw=true) | ![Scene After](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare2.png?raw=true) |
 
-**Method Comparison (Portrait)**
-
-| No Anti-Aliasing | Adaptive Anti-Aliasing |
 | :---: | :---: |
 | ![Portrait No AA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare3.png?raw=true) | ![Portrait Adaptive AA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare4.png?raw=true) |
-| **TAA (Temporal Anti-Aliasing)** | **TAA + DLAA** |
+
+| :---: | :---: |
 | ![Portrait TAA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare5.png?raw=true) | ![Portrait TAA+DLAA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare6.png?raw=true) |
 
 ---
