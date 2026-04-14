@@ -35,8 +35,8 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
     <td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td><img src="Compare1.png?raw=true" width="450"></td>
-    <td><img src="Compare2.png?raw=true" width="450"></td>
+    <td><img src="Compare1.png" width="450"></td>
+    <td><img src="Compare2.png" width="450"></td>
   </tr>
 </table>
 
@@ -45,7 +45,7 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 <p align="center">
   <strong>TAA + DLAA Comparison</strong>
   <br>
-  <img src="Compare3.png?raw=true" width="650">
+  <img src="Compare3.png" width="650">
 </p>
 
 ---
