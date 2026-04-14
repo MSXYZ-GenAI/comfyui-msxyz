@@ -9,7 +9,7 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 <p align="center">
   <img src="taa_dlaa_node.png" width="480">
-  <img src="video_aa_node.png" width="480">
+  <img src="adaptiveaa_node.png" width="480">
 </p>
 
 ---
