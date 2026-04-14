@@ -3,6 +3,7 @@ A professional-grade, hybrid anti-aliasing post-processing node for ComfyUI. Ver
 
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
   <img src="taa_dlaa.png" width="480">
+  <img src="video_aa_node.png" width="480">
 </p>
 
 # Features
@@ -14,7 +15,9 @@ Edge-Aware Weighting: Intelligent blending to prevent blurring of fine details.
 
 # Compare
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
-  <img src="Compare.png" width="640">
+  <img src="Compare2.png" width="640">
+  <img src="Compare3.png" width="640">
+  <img src="Compare4.png" width="640">
 </p>
 
 # Install Node
