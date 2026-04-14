@@ -35,6 +35,39 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 ---
 
+## Parameters
+
+### TAA Parameters
+
+**taa_strength**  
+Recommended: 0.9 | Fast motion: 0.7 | Static scene: 0.95
+**taa_history_alpha**  
+Recommended: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05
+**jitter_scale**  
+Recommended: 0.5 | Off: 0.0 | Maximum: 1.0
+
+---
+
+### DLAA Parameters
+**dlaa_strength**  
+Recommended: 0.7 | Pure AA (no sharpening): 0.0 | Aggressive sharpening: 1.0
+
+---
+
+### Edge AA Parameters
+**edge_threshold**  
+Recommended: 0.08 | Only hard edges: 0.2 | Almost everything: 0.02
+**blur_radius**  
+Recommended: 1 | Softer: 2–3 | Very soft: 4–5
+
+---
+
+### Control
+**reset_history**  
+Normal: False | On scene change: True (for 1 frame)
+
+---
+
 ## Installation
 
 Recommended: Install via ComfyUI-Manager.
