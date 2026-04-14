@@ -21,7 +21,7 @@ Edge-Aware Weighting: Intelligent blending to prevent blurring of fine details.
 </p>
 
 # Install Node
-Recommended Install via ComfyUI-Manager.
+Recommended Install via ComfyUI-Manager.</br>
 Manual Clone Repository:
 code
 Bash
@@ -30,7 +30,7 @@ git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git
 
 # Parameters
 
-# TAA Parameters
+TAA Parameters
 taa_strength
 Recommended: 0.9 | Fast motion: 0.7 | Static scene: 0.95
 
@@ -40,7 +40,7 @@ Recommended: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05
 jitter_scale
 Recommended: 0.5 | Off: 0.0 | Maximum: 1.0
 
-# DLAA Parameters
+DLAA Parameters
 Recommended: 0.7 | Pure AA, no sharpening: 0.0 | Aggressive sharpness: 1.0
 
 Edge AA Parameters
@@ -52,7 +52,7 @@ Recommended: 1 | Softer: 2–3 | Very soft: 4–5
 Control
 Normal: False | On scene change: True (for 1 frame)
 
-# Safe starting preset:
+Safe starting preset:
 taa_strength      = 0.9
 taa_history_alpha = 0.1
 jitter_scale      = 0.5
