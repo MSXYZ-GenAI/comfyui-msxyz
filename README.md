@@ -27,25 +27,25 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 ## Compare
 
 <p align="center">
-  <strong>Scene Comparison</strong>
+  <strong>AdaptiveAA Comparison</strong>
 </p>
 <table align="center">
   <tr>
-    <td align="center"><strong>Before</strong></td>
-    <td align="center"><strong>After</strong></td>
+    <td align="center"><strong></strong></td>
+    <td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td><img src="Compare1.png?raw=true" alt="Scene Before" width="450"></td>
-    <td><img src="Compare2.png?raw=true" alt="Scene After" width="450"></td>
+    <td><img src="Compare1.png?raw=true" width="450"></td>
+    <td><img src="Compare2.png?raw=true" width="450"></td>
   </tr>
 </table>
 
 <br>
 
 <p align="center">
-  <strong>Method Comparison</strong>
+  <strong>TAA + DLAA Comparison</strong>
   <br>
-  <img src="Compare3.png?raw=true" alt="Method Comparison" width="650">
+  <img src="Compare3.png?raw=true" width="650">
 </p>
 
 ---
