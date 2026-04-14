@@ -1,5 +1,5 @@
-# Video TAA + DLAA Anti-Aliasing (ComfyUI)
-A professional-grade, hybrid anti-aliasing post-processing node for ComfyUI. Version 0.1.1 introduces a refined Temporal Anti-Aliasing (TAA) pipeline with ghosting suppression and Halton Sequence jittering, paired with our high-performance DLAA (Deep Learning Anti-Aliasing) network.
+# ComfyUI Video Anti-Aliasing Pack (TAA + DLAA)
+These ComfyUI nodes provide advanced anti-aliasing solutions for videos and images. The VideoTAADLAA node combines both Temporal Anti-Aliasing (TAA) and Deep Learning Anti-Aliasing (DLAA) techniques to deliver sharp and smooth results, while the VideoAdaptiveAA node smooths only the jagged (aliasing-prone) areas.
 
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
   <img src="taa_dlaa.png" width="480">
@@ -29,8 +29,7 @@ cd ComfyUI/custom_nodes/
 git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git
 
 # Parameters
-
-TAA Parameters
+<p>TAA Parameters</p>
 taa_strength
 Recommended: 0.9 | Fast motion: 0.7 | Static scene: 0.95
 
@@ -40,7 +39,7 @@ Recommended: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05
 jitter_scale
 Recommended: 0.5 | Off: 0.0 | Maximum: 1.0
 
-DLAA Parameters
+<p>DLAA Parameters</p>
 Recommended: 0.7 | Pure AA, no sharpening: 0.0 | Aggressive sharpness: 1.0
 
 Edge AA Parameters
@@ -52,7 +51,7 @@ Recommended: 1 | Softer: 2–3 | Very soft: 4–5
 Control
 Normal: False | On scene change: True (for 1 frame)
 
-Safe starting preset:
+<p>Safe starting preset:</p>
 taa_strength      = 0.9
 taa_history_alpha = 0.1
 jitter_scale      = 0.5
