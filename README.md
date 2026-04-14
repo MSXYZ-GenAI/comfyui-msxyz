@@ -1,17 +1,16 @@
-# Anti-Aliasing Node
-A professional-grade, edge-aware anti-aliasing post-processing node for ComfyUI. This node is specifically designed to eliminate jagged edges (aliasing) in AI-generated videos and images without sacrificing overall texture detail.
-
-# Description
-AI video generation often suffers from "pixel crawling" or "staircase effects" (aliasing) on high-contrast edges. Traditional blur filters fix this by blurring the entire frame, which results in a loss of sharpness.
+# Video TAA + DLAA Anti-Aliasing (ComfyUI)
+A professional-grade, hybrid anti-aliasing post-processing node for ComfyUI. Version 0.1.1 introduces a refined Temporal Anti-Aliasing (TAA) pipeline with ghosting suppression and Halton Sequence jittering, paired with our high-performance DLAA (Deep Learning Anti-Aliasing) network.
 
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
-  <img src="video_aa_node.png" width="480">
+  <img src="taa_dlaa.png" width="480">
 </p>
 
 # Features
-Smart Edge Detection: Uses mathematical gradients to find jagged boundaries.
-Detail Preservation: Keeps faces, textures, and backgrounds sharp while smoothing only the "noisy" edges.
-Adaptive Blending: Smoothly transitions between the original image and the anti-aliased edges.
+Temporal Anti-Aliasing (TAA): Stabilizes flickering in video sequences using frame-history.
+DLAA (Deep Learning AA): Uses a targeted neural block to clean up remaining aliasing without losing texture.
+Ghosting-Free Logic: Advanced history clamping ensures fast-moving objects don't leave "ghost trails."
+Halton Sequence Jittering: Superior sub-pixel sampling distribution for cleaner edges.
+Edge-Aware Weighting: Intelligent blending to prevent blurring of fine details.
 
 # Compare
 <p align="center" style="display: flex; justify-content: center; gap: 10px;">
@@ -20,22 +19,52 @@ Adaptive Blending: Smoothly transitions between the original image and the anti-
 </p>
 
 # Install Node
-Recommended Install via ComfyUI-Manager.<br>
+Recommended Install via ComfyUI-Manager.
+Manual Clone Repository:
+code
+Bash
+cd ComfyUI/custom_nodes/
+git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git
 
-Manual Clone Repository<br>
-cd ComfyUI/custom_nodes/<br>
-git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git<br>
-Restart ComfyUI.
+# Parameters
 
-# Parameters & Usage
-Find the node under: CustomPostProcess -> 
-Parameter	Type	Description	Recommended Value
-strength	FLOAT	The intensity of the smoothing effect.	0.8 - 1.2
-edge_threshold	FLOAT	Sensitivity of edge detection. Lower = more areas smoothed.	0.10 - 0.20
-blur_radius	INT	The width of the anti-aliasing filter.	1 (Sharper) or 2 (Softer)
-Ideal Workflow Placement:
-VAE Decode -> Video Adaptive AA -> Video Combine (VHS)
+# TAA Parameters
+taa_strength
+Recommended: 0.9 | Fast motion: 0.7 | Static scene: 0.95
+
+taa_history_alpha
+Recommended: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05
+
+jitter_scale
+Recommended: 0.5 | Off: 0.0 | Maximum: 1.0
+
+# DLAA Parameters
+Recommended: 0.7 | Pure AA, no sharpening: 0.0 | Aggressive sharpness: 1.0
+
+Edge AA Parameters
+Recommended: 0.08 | Only hard edges: 0.2 | Almost everything: 0.02
+
+blur_radius
+Recommended: 1 | Softer: 2–3 | Very soft: 4–5
+
+Control
+Normal: False | On scene change: True (for 1 frame)
+
+# Safe starting preset:
+taa_strength      = 0.9
+taa_history_alpha = 0.1
+jitter_scale      = 0.5
+dlaa_strength     = 0.7
+edge_threshold    = 0.08
+blur_radius       = 1
+reset_history     = False
 
 # Pro Tips
-For Upscaling: Always place this node after an upscale operation to clean up any pixel interpolation artifacts.
-For Animation: If you notice "flickering" on thin lines, decrease the edge_threshold to allow the node to cover more subtle edges.
+Ghosting Issues: If you see trailing shadows behind moving objects, slightly increase the edge_threshold or decrease taa_strength.
+For Animation: Use a lower jitter_scale (0.5 - 1.0) for cleaner, more stable motion lines.
+Upscale Workflow: Place this node immediately after your Upscale node. The jittering will help integrate the new pixel data created by the upscaler.
+Batching: If you experience "Out of Memory" errors on high-resolution renders, set your batch_size to 1 or 2.
+
+# Changelog
+v0.1.1: Added History Clamping (Ghosting fix), Halton Sequence jittering, and improved edge-aware blending logic.
+v0.1.0: Initial release of the adaptive anti-aliasing node.
