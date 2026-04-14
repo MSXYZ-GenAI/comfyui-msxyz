@@ -1,9 +1,3 @@
-### 🛠 Tech Stack:
-
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![ComfyUI](https://img.shields.io/badge/ComfyUI-FF9E0F?style=for-the-badge&logo=nvidia&logoColor=white)
-![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
-
 # ComfyUI Video Anti-Aliasing Pack (TAA + DLAA)
 
 These ComfyUI nodes provide advanced anti-aliasing solutions for videos and images.  
