@@ -5,12 +5,11 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 ---
 
-## Preview
+### Preview
 
-<p align="center">
-  <img src="taa_dlaa_node.png" width="480">
-  <img src="adaptiveaa_node.png" width="480">
-</p>
+| TAA + DLAA Anti-Aliasing | Adaptive Anti-Aliasing |
+| :---: | :---: |
+| ![Video TAA + DLAA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/PREVIEW_TAA_DLAA.png?raw=true) | ![Video Adaptive AA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/PREVIEW_ADAPTIVE_AA.png?raw=true) |
 
 ---
 
