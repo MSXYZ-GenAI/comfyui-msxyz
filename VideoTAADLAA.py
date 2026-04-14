@@ -69,14 +69,14 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.9, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "taa_history_alpha": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.5, "step": 0.01}),
+                "taa_strength": ("FLOAT", {"default": 0.65, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "taa_history_alpha": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.1}),
                 "dlaa_strength": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.08, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.12, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1}),
-                "reset_history": ("BOOLEAN", {"default": False}),
-                # 0 = VRAM'e göre otomatik
+                # ARTIK VARSAYILAN TRUE: Her yeni render temiz bir başlangıç yapar.
+                "reset_history": ("BOOLEAN", {"default": True}), 
                 "batch_size": ("INT", {"default": 4, "min": 0, "max": 32, "step": 1}),
             }
         }
