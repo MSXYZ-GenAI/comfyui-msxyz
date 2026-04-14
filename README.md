@@ -24,18 +24,29 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 ---
 
-### Compare
+## Compare
 
-**Method Comparison (Portrait)**
+<p align="center">
+  <strong>Scene Comparison</strong>
+</p>
+<table align="center">
+  <tr>
+    <td align="center"><strong>Before</strong></td>
+    <td align="center"><strong>After</strong></td>
+  </tr>
+  <tr>
+    <td><img src="Compare1.png?raw=true" alt="Scene Before" width="450"></td>
+    <td><img src="Compare2.png?raw=true" alt="Scene After" width="450"></td>
+  </tr>
+</table>
 
-| :---: | :---: |
-| ![Scene Before](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare1.png?raw=true) | ![Scene After](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare2.png?raw=true) |
+<br>
 
-| :---: | :---: |
-| ![Portrait No AA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare3.png?raw=true) | ![Portrait Adaptive AA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare4.png?raw=true) |
-
-| :---: | :---: |
-| ![Portrait TAA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare5.png?raw=true) | ![Portrait TAA+DLAA](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/Compare6.png?raw=true) |
+<p align="center">
+  <strong>Method Comparison</strong>
+  <br>
+  <img src="Compare3.png?raw=true" alt="Method Comparison" width="650">
+</p>
 
 ---
 
