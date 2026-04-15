@@ -1,6 +1,9 @@
 # ComfyUI Video Anti-Aliasing Pack (TAA + DLAA-inspired)
 <p align="center">
-  <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=for-the-badge&logo=github" alt="ComfyUI-Manager Verified"><img src="https://img.shields.io/github/v/release/MSXYZ-GenAI/comfyui-msxyz?style=for-the-badge&color=orange" alt="Release"><img src="https://img.shields.io/badge/python-3.10+-blue?style=for-the-badge&logo=python" alt="Python Version"><img src="https://img.shields.io/github/license/MSXYZ-GenAI/comfyui-msxyz?style=for-the-badge&color=blue" alt="License"><img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=for-the-badge&color=gold" alt="Stars">
+  <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=flat-square&logo=github" alt="Manager">
+  <img src="https://img.shields.io/github/v/release/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=orange" alt="Release">
+  <img src="https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python" alt="Python">
+  <img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
 </p>
 
 Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharp, stable results, while VideoAdaptiveAA targets specific aliasing-prone regions. The system utilizes temporal accumulation, jittered sampling, and CNN-based refinement for superior edge quality.
