@@ -52,7 +52,7 @@ class _DLAANet(nn.Module):
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
         nn.init.kaiming_normal_(convs[0].weight)
 
-        # FIX v0.2.0: dirac_ yerine identity-benzeri başlatma.
+        # FIX v0.1.1: dirac_ yerine identity-benzeri başlatma.
         # dirac_ semantik olarak doğru ama in==out==16 durumunda
         # bazı PyTorch versiyonlarında uyarı üretebilir.
         # eye tabanlı init daha güvenli ve aynı etkiyi verir.
@@ -140,7 +140,7 @@ class VideoTAADLAA:
     CATEGORY = "CustomPostProcess"
 
     def _device_key(self, device: torch.device) -> str:
-        # FIX v0.2.0: "cuda" ve "cuda:0" aynı cache entry'i kullanır,
+        # FIX v0.1.1: "cuda" ve "cuda:0" aynı cache entry'i kullanır,
         # gereksiz model kopyası ve bellek sızıntısı önlenir.
         return f"{device.type}:{device.index if device.index is not None else 0}"
 
@@ -197,7 +197,7 @@ class VideoTAADLAA:
     # -------------------------
     def _dlaa_batch(self, frames: torch.Tensor, strength: float, net: _DLAANet) -> torch.Tensor:
         """
-        FIX v0.2.0: DLAA artık tüm frame'leri tek seferde batch olarak işler.
+        FIX v0.1.1: DLAA artık tüm frame'leri tek seferde batch olarak işler.
         Büyük videolarda belirgin hız artışı sağlar (özellikle GPU'da).
         TAA history sıralı frame bağımlılığı gerektirdiği için döngü zorunlu,
         ama DLAA bağımsız olduğundan batch'e alındı.
