@@ -1,13 +1,13 @@
 # Created By MSXYZ and Claude Opus 4.6
 # GPU başında ciddi işler döndürüyoruz. 🚀
 # TAA (Temporal Anti-Aliasing) + DLAA (Deep Learning Anti-Aliasing) Adaptation
-# v0.1.1 - Fixed: Batch Size validation and Range Error
+# v0.1.1 - ComfyUI Native Memory & Device Management
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import threading
 import logging
+import comfy.model_management as mm
 
 logger = logging.getLogger("VideoTAADLAA")
 if not logger.handlers:
@@ -15,6 +15,8 @@ if not logger.handlers:
     _handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
     logger.addHandler(_handler)
 logger.setLevel(logging.INFO)
+
+# --- (Sınıflarınız aynı kalıyor, sadece _DLAANet forward kısmında cihaz kontrolü gerekebilir) ---
 
 class _DLAANet(nn.Module):
     def __init__(self):
@@ -73,7 +75,6 @@ class _TAAState:
 
 class VideoTAADLAA:
     def __init__(self):
-        self._lock = threading.Lock()
         self._net_cache: dict[str, _DLAANet] = {}
         self._taa = _TAAState()
 
@@ -87,8 +88,8 @@ class VideoTAADLAA:
                 "motion_sensitivity": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
                 "jitter_scale":    ("FLOAT", {"default": 0.5,  "min": 0.0, "max": 2.0,  "step": 0.1}),
                 "dlaa_strength":   ("FLOAT", {"default": 0.6,  "min": 0.0, "max": 1.0,  "step": 0.05}),
-                "edge_threshold":  ("FLOAT", {"default": 0.12, "min": 0.0, "max": 1.0,  "step": 0.01}),
-                "blur_radius":     ("INT",   {"default": 1,    "min": 0,   "max": 5,    "step": 1}), # Min 0 yapıldı
+                "edge_threshold":  ("FLOAT", {"default": 0.12, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "blur_radius":     ("INT",   {"default": 1,    "min": 0,   "max": 5,    "step": 1}),
                 "reset_history":   ("BOOLEAN", {"default": False}),
                 "batch_size":      ("INT",   {"default": 0,    "min": 0,   "max": 64,   "step": 1}),
             }
@@ -126,62 +127,50 @@ class VideoTAADLAA:
 
     def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale,
                 dlaa_strength, edge_threshold, blur_radius, reset_history, batch_size):
+        
+        # ComfyUI cihaz yönetimi
+        device = mm.get_torch_device()
+        
+        if reset_history:
+            self._taa.reset()
 
-        with self._lock:
-            if reset_history:
-                self._taa.reset()
+        net = self._get_net(device)
+        B, H, W, C = images.shape
+        
+        # ComfyUI bellek yönetimi (VRAM kullanımı)
+        free_mem = mm.get_free_memory()
+        working_batch_size = batch_size if batch_size > 0 else max(1, min(16, int(free_mem // (1024 * 1024 * 64))))
+        
+        images = images.to(device)
+        has_alpha = (C == 4)
+        outputs = []
 
-            device = images.device
-            net = self._get_net(device)
-            B, H, W, C = images.shape
-            
-            # --- Kritik Hata Düzeltme: Batch Size Hesabı ---
-            working_batch_size = batch_size
-            if working_batch_size <= 0:
-                BYTES_PER_PIXEL = 4          # float32
-                PIPELINE_MULTIPLIER = 14     # TAA history + jitter + edge buffers toplamı
-                cost = H * W * C * BYTES_PER_PIXEL * PIPELINE_MULTIPLIER
-                free, _ = torch.cuda.mem_get_info() if torch.cuda.is_available() else (0,0)
-                working_batch_size = max(1, min(16, int((free * 0.6) // cost))) if free > 0 else 1
-            
-            # Range hatasını önlemek için batch_size'ın en az 1 olduğundan emin oluyoruz
-            working_batch_size = max(1, working_batch_size)
-            # ----------------------------------------------
+        with torch.no_grad():
+            for i in range(0, B, working_batch_size):
+                chunk = images[i:i + working_batch_size]
+                img = chunk.permute(0, 3, 1, 2).float()
+                img_rgb = img[:, :3]
+                img_alpha = img[:, 3:4] if has_alpha else None
+                results_rgb = []
 
-            images = images.to(device)
-            has_alpha = (C == 4)
-            outputs = []
+                for f_idx in range(img_rgb.shape[0]):
+                    f = img_rgb[f_idx:f_idx + 1]
+                    f = self._jitter(f, self._taa.frame_count, jitter_scale, net)
+                    f = self._edge_aa(f, edge_threshold, blur_radius, net)
+                    taa_out = self._taa.update(f, taa_alpha, motion_sensitivity)
+                    f = torch.lerp(f, taa_out, taa_strength)
+                    if dlaa_strength > 0.0:
+                        f = torch.lerp(f, net(f), dlaa_strength)
+                    results_rgb.append(f.clamp(0.0, 1.0))
 
-            with torch.no_grad():
-                for i in range(0, B, working_batch_size):
-                    chunk = images[i:i + working_batch_size]
-                    img = chunk.permute(0, 3, 1, 2).float()
-
-                    img_rgb = img[:, :3]
-                    img_alpha = img[:, 3:4] if has_alpha else None
-                    results_rgb = []
-
-                    for f_idx in range(img_rgb.shape[0]):
-                        f = img_rgb[f_idx:f_idx + 1]
-
-                        f = self._jitter(f, self._taa.frame_count, jitter_scale, net)
-                        f = self._edge_aa(f, edge_threshold, blur_radius, net)
-                        
-                        taa_out = self._taa.update(f, taa_alpha, motion_sensitivity)
-                        f = torch.lerp(f, taa_out, taa_strength)
-
-                        if dlaa_strength > 0.0:
-                            f = torch.lerp(f, net(f), dlaa_strength)
-
-                        results_rgb.append(f.clamp(0.0, 1.0))
-
-                    batch_rgb = torch.cat(results_rgb, dim=0)
-                    batch_out = torch.cat([batch_rgb, img_alpha], dim=1) if has_alpha else batch_rgb # chunk'a ait alpha, shape: [chunk_B, 1, H, W]
-                    outputs.append(batch_out.permute(0, 2, 3, 1).cpu())
-                    
-                    logger.info(f"Processed: {min(i + working_batch_size, B)} / {B}")
-
-            return (torch.cat(outputs, dim=0),)
+                batch_rgb = torch.cat(results_rgb, dim=0)
+                batch_out = torch.cat([batch_rgb, img_alpha], dim=1) if has_alpha else batch_rgb
+                outputs.append(batch_out.permute(0, 2, 3, 1).to("cpu"))
+                
+        # Belleği rahatlat
+        mm.soft_empty_cache()
+        
+        return (torch.cat(outputs, dim=0),)
 
 NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
 NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing"}
