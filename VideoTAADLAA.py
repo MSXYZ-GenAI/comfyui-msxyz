@@ -1,7 +1,7 @@
 # Created By MSXYZ and Claude Opus 4.6
 # GPU başında ciddi işler döndürüyoruz. 🚀
 # TAA (Temporal Anti-Aliasing) + DLAA (Deep Learning Anti-Aliasing) Adaptation
-# v0.1.2 - Fixed: Batch Size validation and Range Error
+# v0.1.1 - Fixed: Batch Size validation and Range Error
 
 import torch
 import torch.nn as nn
