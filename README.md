@@ -6,7 +6,8 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ⚠️ Important Note
 
-This is a DLAA-inspired hybrid post-processing approach designed specifically for ComfyUI, rather than a port of NVIDIA’s native DLAA. It focuses on achieving superior visual quality without the limitations of real-time engine constraints.
+This implementation is not NVIDIA’s native Deep Learning Anti-Aliasing (DLAA).
+It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
 
 ---
 
