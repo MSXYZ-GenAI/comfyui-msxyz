@@ -1,15 +1,12 @@
 # ComfyUI Video Anti-Aliasing Pack (TAA + DLAA-inspired)
 
-These ComfyUI nodes provide advanced anti-aliasing solutions for videos and images.
-The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) with a DLAA-inspired post-processing pipeline to deliver sharp and stable results, while the VideoAdaptiveAA node selectively smooths only aliasing-prone regions.
-The system integrates temporal accumulation, edge-aware filtering, jittered sampling, and a lightweight CNN-based refinement stage inspired by DLAA-style techniques.
+Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharp, stable results, while VideoAdaptiveAA targets specific aliasing-prone regions. The system utilizes temporal accumulation, jittered sampling, and CNN-based refinement for superior edge quality.
 
 ---
 
-⚠️ Important Note on Naming
+⚠️ Important Note
 
-This implementation is not NVIDIA’s native Deep Learning Anti-Aliasing (DLAA).
-It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
+This is a DLAA-inspired hybrid post-processing approach designed specifically for ComfyUI, rather than a port of NVIDIA’s native DLAA. It focuses on achieving superior visual quality without the limitations of real-time engine constraints.
 
 ---
 
