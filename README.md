@@ -48,7 +48,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
       <video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/raw/main/src/aa.mp4" width="100%" controls muted loop autoplay></video>
     </td>
   </tr>
-</table
+</table>
 
 ---
 
