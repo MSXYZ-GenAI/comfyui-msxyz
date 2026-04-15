@@ -1,8 +1,7 @@
 # Created By MSXYZ and Claude Opus 4.6
 # GPU başında ciddi işler döndürüyoruz. 🚀
 # TAA (Temporal Anti-Aliasing) + DLAA (Deep Learning Anti-Aliasing) Adaptation
-# v0.1.1 - Anti-Ghosting
-
+# v0.1.1 - Anti-Ghosting + Stability Improvements
 
 import torch
 import torch.nn as nn
@@ -167,4 +166,4 @@ class VideoTAADLAA:
         return (torch.cat(out_list, dim=0),)
 
 NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
-NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA"}
+NODE_DISPLAY_NAME_MAPPINGS = {"🎮 Video TAA + DLAA Anti-Aliasing"}
