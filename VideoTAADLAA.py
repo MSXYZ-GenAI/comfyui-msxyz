@@ -6,237 +6,206 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import threading
+import logging
 
+logger = logging.getLogger("VideoTAADLAA")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
 
-# ---------------------------------------------------------------------------
-# Yardımcı: Hafif DLAA Konvolüsyon
-# ---------------------------------------------------------------------------
+# -----------------------------
+# Gelişmiş DLAA Ağı ve Buffer Yönetimi
+# -----------------------------
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(3, 16, 3, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(16, 16, 3, padding=1, bias=False)
-        self.conv3 = nn.Conv2d(16, 3, 3, padding=1, bias=False)
+        # Katmanlar
+        self.conv = nn.Sequential(
+            nn.Conv2d(3, 16, 3, padding=1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(16, 3, 3, padding=1, bias=False),
+        )
+        
+        # KERNEL OPTİMİZASYONU: Sabitleri GPU buffer'ına kaydediyoruz
+        # Böylece her karede CPU -> GPU transferi yapılmaz.
+        self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
+        self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
+        self.register_buffer("jitter_offsets", torch.tensor([
+            [0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]
+        ], dtype=torch.float32))
+
         self._init_weights()
 
     def _init_weights(self):
-        sharpen = torch.tensor(
-            [[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=torch.float32
-        )
-        nn.init.dirac_(self.conv1.weight)
+        # Deterministik Sharpen Init
+        sharpen = torch.tensor([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=torch.float32)
+        convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
+        nn.init.dirac_(convs[0].weight)
+        nn.init.dirac_(convs[1].weight)
+        nn.init.zeros_(convs[2].weight)
         with torch.no_grad():
-            for i in range(self.conv3.weight.shape[0]):
-                for j in range(self.conv3.weight.shape[1]):
-                    self.conv3.weight[i, j] = sharpen * 0.1
-        nn.init.dirac_(self.conv2.weight)
+            for i in range(3):
+                for j in range(3):
+                    convs[2].weight[i, j] = sharpen * 0.1
 
     def forward(self, x):
-        residual = x
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = self.conv3(x)
-        return torch.clamp(residual + x * 0.15, 0.0, 1.0)
+        return torch.clamp(x + self.conv(x) * 0.15, 0.0, 1.0)
 
 
-# ---------------------------------------------------------------------------
-# TAA Geçmiş Kare Yöneticisi
-# ---------------------------------------------------------------------------
-class _TAAHistory:
+# -----------------------------
+# Hareket Duyarlı TAA Yönetimi
+# -----------------------------
+class _TAAState:
     def __init__(self):
         self.history: torch.Tensor | None = None
+        self.frame_count: int = 0
 
     def reset(self):
         self.history = None
+        self.frame_count = 0
 
-    def update(self, frame: torch.Tensor, alpha: float) -> torch.Tensor:
+    def update(self, frame: torch.Tensor, alpha: float, motion_threshold: float) -> torch.Tensor:
         if self.history is None or self.history.shape != frame.shape:
             self.history = frame.clone()
+            self.frame_count += 1
             return frame
-        blended = alpha * self.history + (1.0 - alpha) * frame
-        self.history = blended.detach().clone()
-        return blended
+        
+        # GHOSTING KONTROLÜ (Motion Masking):
+        # Kareler arası farkı hesapla (L1 norm)
+        diff = torch.abs(frame - self.history).mean(dim=1, keepdim=True)
+        
+        # Hareketin olduğu yerlerde alpha'yı (geçmişin etkisini) düşür
+        # Eğer fark threshold'un üzerindeyse o bölgeyi yeni kareden al (ghosting'i kes)
+        motion_mask = torch.clamp(diff * motion_threshold * 10.0, 0.0, 1.0)
+        dynamic_alpha = alpha * (1.0 - motion_mask)
+        
+        out = dynamic_alpha * self.history + (1.0 - dynamic_alpha) * frame
+        self.history = out.detach()
+        self.frame_count += 1
+        return out
 
 
-# ---------------------------------------------------------------------------
-# Ana Node
-# ---------------------------------------------------------------------------
+# -----------------------------
+# Ana ComfyUI Node
+# -----------------------------
 class VideoTAADLAA:
-    _taa_history = _TAAHistory()
-    _dlaa_net: _DLAANet | None = None
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._net_cache: dict[str, _DLAANet] = {}
+        self._taa = _TAAState()
 
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.65, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "taa_history_alpha": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 0.5, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.1}),
-                "dlaa_strength": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.12, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "blur_radius": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1}),
-                # ARTIK VARSAYILAN TRUE: Her yeni render temiz bir başlangıç yapar.
-                "reset_history": ("BOOLEAN", {"default": True}), 
-                "batch_size": ("INT", {"default": 4, "min": 0, "max": 32, "step": 1}),
+                "taa_strength":    ("FLOAT", {"default": 0.7,  "min": 0.0, "max": 1.0,  "step": 0.05}),
+                "taa_alpha":       ("FLOAT", {"default": 0.8,  "min": 0.0, "max": 0.99, "step": 0.01}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "jitter_scale":    ("FLOAT", {"default": 0.5,  "min": 0.0, "max": 2.0,  "step": 0.1}),
+                "dlaa_strength":   ("FLOAT", {"default": 0.6,  "min": 0.0, "max": 1.0,  "step": 0.05}),
+                "edge_threshold":  ("FLOAT", {"default": 0.12, "min": 0.0, "max": 1.0,  "step": 0.01}),
+                "blur_radius":     ("INT",   {"default": 1,    "min": 1,   "max": 5,    "step": 1}),
+                "reset_history":   ("BOOLEAN", {"default": False}),
+                "batch_size":      ("INT",   {"default": 0,    "min": 0,   "max": 64,   "step": 1}),
             }
         }
 
     RETURN_TYPES = ("IMAGE",)
-    FUNCTION = "apply_taa_dlaa"
+    FUNCTION = "execute"
     CATEGORY = "CustomPostProcess"
 
-    # -----------------------------------------------------------------------
-    def _auto_batch_size(self, images):
-        if not torch.cuda.is_available():
-            return 1
-        total_vram = torch.cuda.get_device_properties(0).total_memory
-        free_vram = total_vram - torch.cuda.memory_allocated(0)
-        B, H, W, C = images.shape
-        bytes_per_frame = H * W * C * 4 * 12  # float32 * buffer katsayısı
-        safe_batch = max(1, int((free_vram * 0.6) // bytes_per_frame))
-        return min(safe_batch, 16)
+    def _get_net(self, device: torch.device) -> _DLAANet:
+        key = str(device)
+        if key not in self._net_cache:
+            self._net_cache[key] = _DLAANet().to(device).eval()
+        return self._net_cache[key]
 
-    # -----------------------------------------------------------------------
-    def _process_frame(self, frame, net, device,
-                       taa_strength, taa_history_alpha,
-                       jitter_scale, dlaa_strength,
-                       edge_threshold, blur_radius):
-        """Tek bir mini-batch kareyi işle."""
-        img = frame.permute(0, 3, 1, 2).float()
-
-        has_alpha = img.shape[1] == 4
-        if has_alpha:
-            alpha_ch = img[:, 3:4]
-            img_rgb = img[:, :3]
-        else:
-            img_rgb = img
-
-        # Adım 1: Jitter
-        jittered = self._apply_jitter(img_rgb, jitter_scale)
-
-        # Adım 2: Edge AA
-        edge_aa = self._edge_aa(jittered, edge_threshold, blur_radius)
-
-        # Adım 3: TAA
-        if taa_strength > 0.0:
-            taa_out = VideoTAADLAA._taa_history.update(edge_aa, taa_history_alpha)
-            taa_out = (1.0 - taa_strength) * edge_aa + taa_strength * taa_out
-        else:
-            taa_out = edge_aa
-
-        taa_out = torch.clamp(taa_out, 0.0, 1.0)
-
-        # Adım 4: DLAA
-        if dlaa_strength > 0.0:
-            dlaa_out = net(taa_out)
-            result_rgb = (1.0 - dlaa_strength) * taa_out + dlaa_strength * dlaa_out
-        else:
-            result_rgb = taa_out
-
-        result_rgb = torch.clamp(result_rgb, 0.0, 1.0)
-
-        if has_alpha:
-            result = torch.cat([result_rgb, alpha_ch], dim=1)
-        else:
-            result = result_rgb
-
-        return result.permute(0, 2, 3, 1)
-
-    # -----------------------------------------------------------------------
-    def apply_taa_dlaa(self, images, taa_strength, taa_history_alpha,
-                       jitter_scale, dlaa_strength, edge_threshold,
-                       blur_radius, reset_history, batch_size):
-
-        if reset_history:
-            VideoTAADLAA._taa_history.reset()
-
-        device = images.device
-
-        # DLAA ağı lazy init
-        if VideoTAADLAA._dlaa_net is None:
-            VideoTAADLAA._dlaa_net = _DLAANet()
-        net = VideoTAADLAA._dlaa_net.to(device).eval()
-
-        # batch_size=0 → otomatik
-        if batch_size == 0:
-            batch_size = self._auto_batch_size(images)
-            print(f"[VideoTAADLAA] Auto batch size: {batch_size}")
-
-        total_frames = images.shape[0]
-        print(f"[VideoTAADLAA] Total frames: {total_frames} | Batch size: {batch_size}")
-
-        results = []
-
-        with torch.no_grad():
-            for start in range(0, total_frames, batch_size):
-                end = min(start + batch_size, total_frames)
-                mini_batch = images[start:end].to(device)
-
-                processed = self._process_frame(
-                    mini_batch, net, device,
-                    taa_strength, taa_history_alpha,
-                    jitter_scale, dlaa_strength,
-                    edge_threshold, blur_radius
-                )
-
-                # İşlenince CPU'ya at → VRAM boşalt
-                results.append(processed.cpu())
-
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-                print(f"[VideoTAADLAA] Processed frames {start+1}-{end} / {total_frames}")
-
-        final = torch.cat(results, dim=0).to(device)
-        return (final,)
-
-    # -----------------------------------------------------------------------
-    @staticmethod
-    def _apply_jitter(x: torch.Tensor, scale: float) -> torch.Tensor:
-        if scale == 0.0:
+    def _jitter(self, x: torch.Tensor, idx: int, scale: float, net: _DLAANet) -> torch.Tensor:
+        if scale <= 0:
             return x
+        off = net.jitter_offsets[idx % 4]
         B, C, H, W = x.shape
-        jx = (0.5 / W) * scale
-        jy = (0.5 / H) * scale
-        theta = torch.tensor(
-            [[1.0, 0.0, jx], [0.0, 1.0, jy]], dtype=torch.float32, device=x.device
-        ).unsqueeze(0).expand(B, -1, -1)
+        theta = torch.eye(2, 3, device=x.device).unsqueeze(0).repeat(B, 1, 1)
+        theta[:, 0, 2] = off[0] * scale / W
+        theta[:, 1, 2] = off[1] * scale / H
         grid = F.affine_grid(theta, x.shape, align_corners=False)
-        return F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
+        # BICUBIC JITTER: Bilinear yerine Bicubic kullanarak keskinliği koruyoruz
+        return F.grid_sample(x, grid, mode="bicubic", padding_mode="reflection", align_corners=False)
 
-    # -----------------------------------------------------------------------
-    @staticmethod
-    def _edge_aa(img_rgb: torch.Tensor, edge_threshold: float, blur_radius: int) -> torch.Tensor:
-        gray = (
-            0.2989 * img_rgb[:, 0:1]
-            + 0.5870 * img_rgb[:, 1:2]
-            + 0.1140 * img_rgb[:, 2:3]
-        )
-        sobel_x = torch.tensor(
-            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
-        ).view(1, 1, 3, 3).to(img_rgb.device)
-        sobel_y = torch.tensor(
-            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32
-        ).view(1, 1, 3, 3).to(img_rgb.device)
+    def _edge_aa(self, x: torch.Tensor, thr: float, blur: int, net: _DLAANet) -> torch.Tensor:
+        gray = 0.299 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.114 * x[:, 2:3]
+        sx = F.conv2d(gray, net.sobel_x, padding=1)
+        sy = F.conv2d(gray, net.sobel_y, padding=1)
+        mask = (torch.sqrt(sx * sx + sy * sy + 1e-6) > thr).float()
+        if blur > 0:
+            k = blur * 2 + 1
+            blurred = F.avg_pool2d(F.pad(x, [blur] * 4, mode="reflect"), k, stride=1)
+            return x * (1.0 - mask) + blurred * mask
+        return x
 
-        edges = torch.sqrt(
-            F.conv2d(gray, sobel_x, padding=1) ** 2
-            + F.conv2d(gray, sobel_y, padding=1) ** 2
-            + 1e-6
-        )
-        mask = torch.clamp((edges > edge_threshold).float(), 0.0, 1.0)
-        ks = blur_radius * 2 + 1
-        padded = F.pad(img_rgb, [blur_radius] * 4, mode="replicate")
-        blurred = F.avg_pool2d(padded, kernel_size=ks, stride=1, padding=0)
-        return img_rgb * (1.0 - mask) + blurred * mask
+    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale,
+                dlaa_strength, edge_threshold, blur_radius, reset_history, batch_size):
 
+        with self._lock:
+            if reset_history:
+                self._taa.reset()
 
-# ---------------------------------------------------------------------------
-# ComfyUI kayıt
-# ---------------------------------------------------------------------------
-NODE_CLASS_MAPPINGS = {
-    "VideoTAADLAA": VideoTAADLAA,
-}
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing",
-}
+            device = images.device
+            net = self._get_net(device)
+
+            if batch_size == 0:
+                # Maliyet hesabında C=4 (RGBA) ve Bicubic payı eklendi
+                B, H, W, C = images.shape
+                cost = H * W * C * 4 * 14 # Bicubic biraz daha fazla VRAM/İşlem ister
+                free, _ = torch.cuda.mem_get_info() if torch.cuda.is_available() else (0,0)
+                batch_size = max(1, min(16, int((free * 0.6) // cost))) if free > 0 else 1
+
+            images = images.to(device)
+            B, H, W, C = images.shape
+            has_alpha = (C == 4)
+            outputs = []
+
+            with torch.no_grad():
+                for i in range(0, B, batch_size):
+                    chunk = images[i:i + batch_size]
+                    img = chunk.permute(0, 3, 1, 2).float()
+
+                    img_rgb = img[:, :3]
+                    img_alpha = img[:, 3:4] if has_alpha else None
+                    results_rgb = []
+
+                    for f_idx in range(img_rgb.shape[0]):
+                        f = img_rgb[f_idx:f_idx + 1]
+
+                        # 1. Jitter (Bicubic Mode)
+                        f = self._jitter(f, self._taa.frame_count, jitter_scale, net)
+
+                        # 2. Edge AA (Optimized Kernels)
+                        f = self._edge_aa(f, edge_threshold, blur_radius, net)
+
+                        # 3. Motion-Adaptive TAA (Anti-Ghosting)
+                        taa_out = self._taa.update(f, taa_alpha, motion_sensitivity)
+                        f = torch.lerp(f, taa_out, taa_strength)
+
+                        # 4. DLAA
+                        if dlaa_strength > 0.0:
+                            f = torch.lerp(f, net(f), dlaa_strength)
+
+                        results_rgb.append(f.clamp(0.0, 1.0))
+
+                    batch_rgb = torch.cat(results_rgb, dim=0)
+                    batch_out = torch.cat([batch_rgb, img_alpha], dim=1) if has_alpha else batch_rgb
+                    outputs.append(batch_out.permute(0, 2, 3, 1).cpu())
+                    
+                    logger.info(f"İşlendi: {min(i + batch_size, B)} / {B}")
+
+            return (torch.cat(outputs, dim=0),)
+
+NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
+NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA (Ultra)"}
