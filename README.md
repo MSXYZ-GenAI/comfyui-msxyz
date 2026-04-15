@@ -54,7 +54,7 @@ The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning An
 
 **🚀 TAA & DLAA Parameters**
 * **`taa_strength`**: Controls the impact of past frames. *(Rec: 0.9 | Fast motion: 0.7 | Static: 0.95)*
-* **`taa_history_alpha`**: Determines how quickly history updates. *(Rec: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05)*
+* **`taa_alpha`**: Determines how quickly history updates. *(Rec: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05)*
 * **`jitter_scale`**: Amount of sub-pixel shifting for edge detection. *(Rec: 0.5 | Off: 0.0 | Maximum: 1.0)*
 * **`dlaa_strength`**: Strength of the deep learning sharpening. *(Rec: 0.7 | Pure AA: 0.0 | Aggressive: 1.0)*
 
