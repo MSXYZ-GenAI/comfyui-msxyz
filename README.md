@@ -35,15 +35,13 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ---
 
-## Comparison: TAA + DLAA Implementation
+## Comparison
 
 | Without TAA + DLAA (Original) | With TAA + DLAA (Optimized) |
 |:---:|:---:|
-| <video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/src/no_aa.mp4" width="100%" controls muted loop autoplay></video> | <video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/src/aa.mp4" width="100%" controls muted loop autoplay></video> |
+| <video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/raw/main/src/no_aa.mp4" width="100%" controls muted loop autoplay></video> | <video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/raw/main/src/aa.mp4" width="100%" controls muted loop autoplay></video> |
 
 ---
-
-## Compare
 
 <p align="center">
   <strong>AdaptiveAA Comparison</strong>
