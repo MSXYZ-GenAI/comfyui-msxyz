@@ -36,7 +36,7 @@ class _DLAANet(nn.Module):
     def _init_weights(self):
         sharpen = torch.tensor([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=torch.float32)
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
-        nn.init.dirac_(convs[0].weight)
+        nn.init.kaiming_normal_(convs[0].weight, mode='fan_out', nonlinearity='relu')
         nn.init.dirac_(convs[1].weight)
         nn.init.zeros_(convs[2].weight)
         with torch.no_grad():
@@ -138,7 +138,9 @@ class VideoTAADLAA:
             # --- Kritik Hata Düzeltme: Batch Size Hesabı ---
             working_batch_size = batch_size
             if working_batch_size <= 0:
-                cost = H * W * C * 4 * 14
+                BYTES_PER_PIXEL = 4          # float32
+                PIPELINE_MULTIPLIER = 14     # TAA history + jitter + edge buffers toplamı
+                cost = H * W * C * BYTES_PER_PIXEL * PIPELINE_MULTIPLIER
                 free, _ = torch.cuda.mem_get_info() if torch.cuda.is_available() else (0,0)
                 working_batch_size = max(1, min(16, int((free * 0.6) // cost))) if free > 0 else 1
             
@@ -174,10 +176,10 @@ class VideoTAADLAA:
                         results_rgb.append(f.clamp(0.0, 1.0))
 
                     batch_rgb = torch.cat(results_rgb, dim=0)
-                    batch_out = torch.cat([batch_rgb, img_alpha], dim=1) if has_alpha else batch_rgb
+                    batch_out = torch.cat([batch_rgb, img_alpha], dim=1) if has_alpha else batch_rgb # chunk'a ait alpha, shape: [chunk_B, 1, H, W]
                     outputs.append(batch_out.permute(0, 2, 3, 1).cpu())
                     
-                    logger.info(f"İşlendi: {min(i + working_batch_size, B)} / {B}")
+                    logger.info(f"Processed: {min(i + working_batch_size, B)} / {B}")
 
             return (torch.cat(outputs, dim=0),)
 
