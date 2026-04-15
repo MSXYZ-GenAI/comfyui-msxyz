@@ -1,4 +1,4 @@
-# ComfyUI Video Anti-Aliasing Pack (TAA + DLAA-inspired)
+# ComfyUI Video Anti-Aliasing Pack
 <p align="center">
   <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=flat-square&logo=github" alt="Manager">
   <img src="https://img.shields.io/github/v/release/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=orange" alt="Release">
