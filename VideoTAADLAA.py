@@ -98,12 +98,12 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.05}), 
-                "taa_alpha": ("FLOAT", {"default": 0.5, "min": 0, "max": 0.95, "step": 0.01}),   
+                "taa_strength": ("FLOAT", {"default": 0.7, "min": 0, "max": 1, "step": 0.05}), 
+                "taa_alpha": ("FLOAT", {"default": 0.6, "min": 0, "max": 0.95, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.05, "min": 0, "max": 1, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.4, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.15, "min": 0, "max": 1, "step": 0.01}),
+                "dlaa_strength": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.05}),
+                "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 1, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
             }
@@ -165,5 +165,10 @@ class VideoTAADLAA:
         
         return (torch.cat(out_list, dim=0),)
 
-NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
-NODE_DISPLAY_NAME_MAPPINGS = {"🎮 Video TAA + DLAA Anti-Aliasing"}
+NODE_CLASS_MAPPINGS = {
+    "VideoTAADLAA": VideoTAADLAA
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing"
+}
