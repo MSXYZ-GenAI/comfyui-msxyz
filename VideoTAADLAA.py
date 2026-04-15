@@ -51,19 +51,18 @@ class _DLAANet(nn.Module):
     def _init(self):
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
         nn.init.kaiming_normal_(convs[0].weight)
-
         # FIX v0.1.1: dirac_ yerine identity-benzeri başlatma.
         # dirac_ semantik olarak doğru ama in==out==16 durumunda
         # bazı PyTorch versiyonlarında uyarı üretebilir.
         # eye tabanlı init daha güvenli ve aynı etkiyi verir.
+        
         with torch.no_grad():
             convs[1].weight.zero_()
             for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
-                convs[1].weight[c, c, 1, 1] = 1.0  # merkez piksel = identity
+                convs[1].weight[c, c, 1, 1] = 1.0 
 
         nn.init.zeros_(convs[2].weight)
 
-        # Sharpen filtresini 16 kanala dağıt
         sharpen = torch.tensor([
             [ 0.0, -1.0,  0.0],
             [-1.0,  5.0, -1.0],
@@ -71,8 +70,8 @@ class _DLAANet(nn.Module):
         ], dtype=torch.float32)
 
         with torch.no_grad():
-            for out_c in range(3):      # RGB çıkış
-                for in_c in range(16):  # 16 giriş kanalı
+            for out_c in range(3):
+                for in_c in range(16):
                     convs[2].weight[out_c, in_c] = (sharpen * 0.1) / 16.0
 
     def forward(self, x):
@@ -98,12 +97,8 @@ class _TAAState:
             return frame
 
         diff = torch.mean(torch.abs(frame - self.history), dim=1, keepdim=True)
-
-        # soft sigmoid motion mask
         motion = torch.sigmoid((diff - motion_sensitivity) * 8.0)
-
         dynamic_alpha = alpha * (1.0 - motion)
-
         out = dynamic_alpha * self.history + (1.0 - dynamic_alpha) * frame
 
         self.history = out.detach()
@@ -140,8 +135,6 @@ class VideoTAADLAA:
     CATEGORY = "CustomPostProcess"
 
     def _device_key(self, device: torch.device) -> str:
-        # FIX v0.1.1: "cuda" ve "cuda:0" aynı cache entry'i kullanır,
-        # gereksiz model kopyası ve bellek sızıntısı önlenir.
         return f"{device.type}:{device.index if device.index is not None else 0}"
 
     def _net(self, device: torch.device) -> _DLAANet:
@@ -150,66 +143,27 @@ class VideoTAADLAA:
             self.net_cache[k] = _DLAANet().to(device).eval()
         return self.net_cache[k]
 
-    # -------------------------
-    # jitter (stable bilinear)
-    # -------------------------
     def jitter(self, x: torch.Tensor, idx: int, scale: float, net: _DLAANet) -> torch.Tensor:
-        if scale < 1e-5:
-            return x
-
+        if scale < 1e-5: return x
         off = net.jitter_offsets[idx % 4]
         B, C, H, W = x.shape
-
         theta = torch.eye(2, 3, device=x.device).unsqueeze(0).repeat(B, 1, 1)
         theta[:, 0, 2] = off[0] * scale / W
         theta[:, 1, 2] = off[1] * scale / H
-
         grid = F.affine_grid(theta, x.shape, align_corners=False)
         return F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
 
-    # -------------------------
-    # edge AA (soft mask)
-    # -------------------------
     def edge_aa(self, x: torch.Tensor, thr: float, blur: int, net: _DLAANet) -> torch.Tensor:
-        if blur <= 0:
-            return x
-
+        if blur <= 0: return x
         gray = 0.299*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
-
         sx = F.conv2d(gray, net.sobel_x, padding=1)
         sy = F.conv2d(gray, net.sobel_y, padding=1)
-
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
-
-        # soft mask
         mask = torch.sigmoid((edge - thr) * 12.0)
-
         k = blur * 2 + 1
-        blurred = F.avg_pool2d(
-            F.pad(x, [blur]*4, mode="reflect"),
-            k, stride=1
-        )
-
+        blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), k, stride=1)
         return x*(1-mask) + blurred*mask
 
-    # -------------------------
-    # DLAA batch forward
-    # -------------------------
-    def _dlaa_batch(self, frames: torch.Tensor, strength: float, net: _DLAANet) -> torch.Tensor:
-        """
-        FIX v0.1.1: DLAA artık tüm frame'leri tek seferde batch olarak işler.
-        Büyük videolarda belirgin hız artışı sağlar (özellikle GPU'da).
-        TAA history sıralı frame bağımlılığı gerektirdiği için döngü zorunlu,
-        ama DLAA bağımsız olduğundan batch'e alındı.
-        """
-        if strength <= 0:
-            return frames
-        enhanced = net(frames)
-        return torch.lerp(frames, enhanced, strength)
-
-    # -------------------------
-    # EXECUTE
-    # -------------------------
     def execute(
         self,
         images: torch.Tensor,
@@ -223,48 +177,55 @@ class VideoTAADLAA:
         reset_history: bool = False,
     ):
         device = mm.get_torch_device()
+        offload_device = mm.intermediate_device() # CPU veya genel device
 
         if reset_history:
             self.taa.reset()
 
         net = self._net(device)
-
         B, H, W, C = images.shape
-        images = images.to(device)
-
+        
+        # FIX v0.1.1: images tensoru CPU'da tutulur, döngü içinde GPU'ya çekilir.
+        out_list = []
         has_alpha = (C == 4)
 
-        # --- TAA (sıralı, history bağımlı) ---
-        taa_frames = []
         with torch.no_grad():
             for i in range(B):
-                f = images[i:i+1].permute(0, 3, 1, 2).float()
-                rgb = f[:, :3]
+                # Tek bir frame'i GPU'ya al
+                img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
+                
+                rgb = img[:, :3]
+                alpha_chan = img[:, 3:4] if has_alpha else None
 
+                # 1. Jitter & Edge AA
                 rgb = self.jitter(rgb, self.taa.frame_id, jitter_scale, net)
                 rgb = self.edge_aa(rgb, edge_threshold, blur_radius, net)
 
+                # 2. TAA Update
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
 
-                taa_frames.append(rgb)
+                # 3. DLAA (Sequential - Memory Safe)
+                if dlaa_strength > 0:
+                    enhanced = net(rgb)
+                    rgb = torch.lerp(rgb, enhanced, dlaa_strength)
 
-        # --- DLAA (batch, paralel) ---
-        with torch.no_grad():
-            rgb_batch = torch.cat(taa_frames, dim=0)           # (B, 3, H, W)
-            rgb_batch = self._dlaa_batch(rgb_batch, dlaa_strength, net)
-            rgb_batch = rgb_batch.clamp(0, 1)
+                rgb = rgb.clamp(0, 1)
 
-        # --- Alpha kanalını geri ekle ve CPU'ya taşı ---
-        if has_alpha:
-            alpha_batch = images.permute(0, 3, 1, 2).float()[:, 3:4]  # (B, 1, H, W)
-            rgb_batch = torch.cat([rgb_batch, alpha_batch], dim=1)      # (B, 4, H, W)
+                # 4. Merge Alpha if exists
+                if has_alpha:
+                    rgb = torch.cat([rgb, alpha_chan], dim=1)
 
-        out = rgb_batch.permute(0, 2, 3, 1).cpu()  # (B, H, W, C)
+                # 5. Sonucu CPU'ya geri at (VRAM'i boşaltmak için)
+                out_list.append(rgb.permute(0, 2, 3, 1).to(offload_device))
 
-        # VRAM Temizliği
-        mm.soft_empty_cache()
+                # Her 10 karede bir belleği temizle (Agresif temizlik)
+                if i % 10 == 0:
+                    mm.soft_empty_cache()
 
+        # Sonuçları tek bir tensor yap
+        out = torch.cat(out_list, dim=0)
+        
         return (out,)
 
 
