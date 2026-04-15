@@ -37,11 +37,9 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ## Comparison: TAA + DLAA Implementation
 
-Below is a side-by-side comparison showing the effect of the Video TAA + DLAA node on LTX-2 video generation.
-
 | Without TAA + DLAA (Original) | With TAA + DLAA (Optimized) |
 |:---:|:---:|
-| <video src="src/no_aa.mp4" width="100%" controls muted loop autoplay></video> | <video src="src/aa.mp4" width="100%" controls muted loop autoplay></video> |
+| <video src="../src/no_aa.mp4" width="100%" controls muted loop autoplay></video> | <video src="../src/aa.mp4" width="100%" controls muted loop autoplay></video> |
 
 ---
 
