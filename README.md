@@ -6,8 +6,6 @@ The system integrates temporal accumulation, edge-aware filtering, jittered samp
 
 ---
 
-This system combines Temporal Anti-Aliasing (TAA), edge-aware filtering, jittered sampling, and a lightweight CNN-based refinement stage inspired by DLAA-style post-processing techniques.
-
 ⚠️ Important Note on Naming
 This implementation is not NVIDIA’s native Deep Learning Anti-Aliasing (DLAA).
 It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
