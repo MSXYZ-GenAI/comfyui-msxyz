@@ -11,9 +11,7 @@ This system combines Temporal Anti-Aliasing (TAA), edge-aware filtering, jittere
 
 This implementation is not NVIDIA’s native Deep Learning Anti-Aliasing (DLAA).
 
-Instead, it is a DLAA-inspired hybrid approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
-
-It is intended for high-quality image and video post-processing applications.
+It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
 
 ---
 
