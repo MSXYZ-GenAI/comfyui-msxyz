@@ -208,4 +208,4 @@ class VideoTAADLAA:
             return (torch.cat(outputs, dim=0),)
 
 NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
-NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA (Ultra)"}
+NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing"}
