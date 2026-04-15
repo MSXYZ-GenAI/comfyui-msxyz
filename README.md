@@ -1,16 +1,15 @@
-# ComfyUI Video Anti-Aliasing Pack (TAA + DLAA)
+# ComfyUI Video Anti-Aliasing Pack (TAA + DLAA-inspired)
 
-These ComfyUI nodes provide advanced anti-aliasing solutions for videos and images.  
-The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) and Deep Learning Anti-Aliasing (DLAA) techniques to deliver sharp and smooth results, while the VideoAdaptiveAA node smooths only jagged (aliasing-prone) areas.
+These ComfyUI nodes provide advanced anti-aliasing solutions for videos and images.
+The VideoTAADLAA node combines Temporal Anti-Aliasing (TAA) with a DLAA-inspired post-processing pipeline to deliver sharp and stable results, while the VideoAdaptiveAA node selectively smooths only aliasing-prone regions.
+The system integrates temporal accumulation, edge-aware filtering, jittered sampling, and a lightweight CNN-based refinement stage inspired by DLAA-style techniques.
 
 ---
 
 This system combines Temporal Anti-Aliasing (TAA), edge-aware filtering, jittered sampling, and a lightweight CNN-based refinement stage inspired by DLAA-style post-processing techniques.
 
 ⚠️ Important Note on Naming
-
 This implementation is not NVIDIA’s native Deep Learning Anti-Aliasing (DLAA).
-
 It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workflows, focusing on visual quality rather than real-time engine constraints.
 
 ---
@@ -26,7 +25,7 @@ It is a DLAA-inspired hybrid post-processing approach designed for ComfyUI workf
 ## Features
 
 - **Temporal Anti-Aliasing (TAA):** Stabilizes flickering in video sequences using frame history.
-- **DLAA (Deep Learning AA):** Neural-based cleanup of residual aliasing without losing texture detail.
+- **DLAA-inspired neural refinement:** Neural-based cleanup of residual aliasing without losing texture detail.
 - **Ghosting-Free Logic:** Advanced history clamping prevents trailing artifacts in fast motion.
 - **Halton Sequence Jittering:** Improves sub-pixel sampling for cleaner edges.
 - **Edge-Aware Weighting:** Preserves fine details while blending.
