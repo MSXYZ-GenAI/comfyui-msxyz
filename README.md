@@ -10,9 +10,9 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ---
 
-> ⚠️ **Important Note / Disclaimer**
-> 
-> This node does not use NVIDIA's closed-source SDKs or native DLAA/DLSS binaries. Instead, it is a **custom adaptation of Temporal and Spatial Anti-Aliasing techniques** commonly found in modern game engines, rebuilt entirely from scratch using PyTorch tensor architecture specifically for ComfyUI video post-processing.
+> [!IMPORTANT]
+> **Disclaimer**
+> This node does not use NVIDIA's closed-source SDKs or native DLAA/DLSS binaries. Instead, it is a custom adaptation of Temporal and Spatial Anti-Aliasing techniques commonly found in modern game engines, rebuilt entirely from scratch using PyTorch tensor architecture specifically for ComfyUI video post-processing.
 
 ---
 
