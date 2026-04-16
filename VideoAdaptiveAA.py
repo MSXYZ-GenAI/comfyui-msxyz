@@ -90,7 +90,6 @@ class VideoAdaptiveAA:
 
         return (result,)
 
-
 NODE_CLASS_MAPPINGS = {
     "VideoAdaptiveAA": VideoAdaptiveAA
 }
