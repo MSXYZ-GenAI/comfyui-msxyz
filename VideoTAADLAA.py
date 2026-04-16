@@ -144,7 +144,7 @@ class VideoTAADLAA:
     CATEGORY = "CustomPostProcess"
 
     def _net(self, device):
-        
+    
         # Ağı ilgili cihaza (CPU/GPU) yükler ve bellekte tutar
         if device not in self.net_cache:
             self.net_cache[device] = _DLAANet().to(device).eval()
