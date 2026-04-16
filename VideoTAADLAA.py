@@ -118,7 +118,7 @@ class _TAAState:
 # =========================
 class VideoTAADLAA:
     def __init__(self):
-        self.net_cache = {} # Farklı GPU cihazları için model önbelleği
+        self.net_cache = {} # Farklı GPU cihazları için model önbelleği.
         self.taa = _TAAState()
 
     @classmethod
