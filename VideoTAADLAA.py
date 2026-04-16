@@ -188,7 +188,7 @@ class VideoTAADLAA:
         # Sadece kenar olan yerlere bulanıklaştırılmış versiyon, diğer yerlere orijinal görüntü verilir
         return x*(1-mask) + blurred*mask
 
-    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=False):
+    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=True):
         device = mm.get_torch_device()
         if reset_history: self.taa.reset()
         net = self._net(device)
