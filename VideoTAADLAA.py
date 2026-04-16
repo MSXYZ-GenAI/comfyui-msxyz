@@ -86,13 +86,13 @@ class _TAAState:
             return frame
 
         # GHOSTING'İ ÖLDÜREN KISIM: AGRESİF NEIGHBORHOOD CLAMPING
-        # Mevcut karenin 3x3 çevresindeki mutlak min/max sınırlarını bulur.
-        # Negatif max_pool2d kullanarak minimum değeri bulmak zekice bir optimizasyondur.
+        # 3x3 komşulukta min/max sınırlarını alıyoruz.
+        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik oluyor.
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
 
-        # Geçmiş karesindeki pikselleri mevcut karedeki renk sınırlarına hapseder.
-        # Bu işlem hayalet görüntünün sızmasını imkansız hale getirir.
+        # Geçmiş kareyi mevcut frame’in renk sınırları içine çekiyoruz.
+        # Bu, ghosting etkisini ciddi şekilde azaltıyor.
         history_clipped = torch.clamp(self.history, local_min, local_max)
 
         # HAREKET REDDİ (Motion Masking)
@@ -100,7 +100,7 @@ class _TAAState:
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         
         # Hassasiyet eşiğine göre hareketli bölgelerde TAA etkisini azaltmak için bir maske oluşturur (0.0 - 1.0 arası)
-        motion_mask = torch.sigmoid((diff - sensitivity) * 40.0)
+        motion_mask = torch.sigmoid((diff - sensitivity) * 20.0)
         
         # Hareketin çok olduğu yerlerde geçmişin ağırlığını (alpha) düşürür
         dynamic_alpha = alpha * (1.0 - motion_mask)
