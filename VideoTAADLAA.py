@@ -177,6 +177,7 @@ class VideoTAADLAA:
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         
         # Hipotenüs hesabı ile net kenar şiddeti bulunur
+        # NaN oluşumunu önlemek için küçük epsilon eklenir
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
         # Belirlenen eşik (threshold) değerine göre maske oluşturulur
