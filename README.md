@@ -87,3 +87,6 @@ Manual installation:
 ```bash
 cd ComfyUI/custom_nodes/
 git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
