@@ -67,7 +67,7 @@ class VideoAdaptiveAA:
 
         # 4. Bulanıklaştırma (Anti-aliasing etkisi)
         # Edge-preserving blur using replicate padding
-        # Avoid zero-padding artifacts that can cause border darkening
+        # Zero-padding kaynaklı kenar koyulaşma artefaktlarını engelle
         # Symmetric blur kernel size based on radius
         kernel_size = blur_radius * 2 + 1
         img_padded = F.pad(img_rgb, (blur_radius, blur_radius, blur_radius, blur_radius), mode="replicate")
