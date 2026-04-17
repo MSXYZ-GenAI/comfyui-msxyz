@@ -102,7 +102,7 @@ class _TAAState:
 
         # Ghosting azaltma: neighborhood clamping ile temporal stabilizasyon
         # 3x3 komşulukta min/max sınırlarını alıyoruz.
-        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik oluyor.
+        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik.
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
 
