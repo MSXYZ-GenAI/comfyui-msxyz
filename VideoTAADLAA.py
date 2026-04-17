@@ -15,11 +15,22 @@ logger = logging.getLogger("VideoTAADLAA")
 # DLAA CORE (Uzamsal Filtre & Keskinleştirme)
 # =========================
 class _DLAANet(nn.Module):
+    """
+    DLAA (Deep Learning Anti-Aliasing) Mimari Taslağı.
+    
+    Not: Şu anki sürüm, yüksek performans için optimize edilmiş statik 3-katmanlı 
+    bir evrişimli (CNN) filtre katmanıdır. Kod yapısı, ileride RealESRGAN veya 
+    benzeri eğitilmiş hafif SR (Super-Resolution) modellerinin weight-injection 
+    yöntemiyle entegre edilebileceği şekilde 'modular-ready' olarak tasarlanmıştır.
+    """
     def __init__(self):
         super().__init__()
         
         # 3 Katmanlı basit bir Evrişimli Sinir Ağı (CNN).
         # Bu ağ, görüntüyü analiz edip detayları kurtarmak/keskinleştirmek için kullanılır.
+        # 1. Katman: Feature Extraction (Özellik Çıkarımı)
+        # 2. Katman: Non-linear Mapping (Doğrusal olmayan haritalama)
+        # 3. Katman: Reconstruction & Sharpening (Yeniden oluşturma ve Keskinleştirme)
         self.conv = nn.Sequential(
             nn.Conv2d(3, 16, 3, padding=1, bias=False),
             nn.ReLU(inplace=True),
