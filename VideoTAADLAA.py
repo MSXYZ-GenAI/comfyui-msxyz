@@ -1,7 +1,6 @@
-# Created By MSXYZ and Claude Opus 4.6
-# GPU başında ciddi işler döndürüyoruz. 🚀
-# TAA (Temporal Anti-Aliasing) + DLAA (Deep Learning Anti-Aliasing) Adaptation
-# v0.1.1 - Anti-Ghosting + Stability Improvements
+# Created by MSXYZ (AI-assisted)
+# Temporal Anti-Aliasing (TAA) + Lightweight DL-style Sharpening Pipeline
+# v0.1.1 - Temporal stability improvements and ghosting reduction
 
 import torch
 import torch.nn as nn
@@ -16,21 +15,24 @@ logger = logging.getLogger("VideoTAADLAA")
 # =========================
 class _DLAANet(nn.Module):
     """
-    DLAA (Deep Learning Anti-Aliasing) Mimari Taslağı.
-    
-    Not: Şu anki sürüm, yüksek performans için optimize edilmiş statik 3-katmanlı 
-    bir evrişimli (CNN) filtre katmanıdır. Kod yapısı, ileride RealESRGAN veya 
-    benzeri eğitilmiş hafif SR (Super-Resolution) modellerinin weight-injection 
-    yöntemiyle entegre edilebileceği şekilde 'modular-ready' olarak tasarlanmıştır.
+    Lightweight CNN-based sharpening module used as a DL-inspired post-process.
+
+    Not:
+    Bu yapı gerçek bir eğitilmiş DLAA modeli değildir.
+    Sadece inference-time çalışan küçük bir CNN ile
+    detay keskinleştirme ve aliasing azaltma hedeflenmiştir.
+
+    Gelecekte pretrained super-resolution / restoration modelleri
+    ile değiştirilebilir şekilde tasarlanmıştır.
     """
     def __init__(self):
         super().__init__()
         
-        # 3 Katmanlı basit bir Evrişimli Sinir Ağı (CNN).
-        # Bu ağ, görüntüyü analiz edip detayları kurtarmak/keskinleştirmek için kullanılır.
-        # 1. Katman: Feature Extraction (Özellik Çıkarımı)
-        # 2. Katman: Non-linear Mapping (Doğrusal olmayan haritalama)
-        # 3. Katman: Reconstruction & Sharpening (Yeniden oluşturma ve Keskinleştirme)
+        # Basit 3 katmanlı CNN tabanlı post-process filtre.
+        # Amaç: görüntü detaylarını hafif şekilde keskinleştirmek ve yumuşak aliasing azaltımı sağlamak.
+        # 1. Katman: Feature extraction
+        # 2. Katman: Non-linear mapping
+        # 3. Katman: Reconstruction / sharpening
         self.conv = nn.Sequential(
             nn.Conv2d(3, 16, 3, padding=1, bias=False),
             nn.ReLU(inplace=True),
@@ -50,19 +52,20 @@ class _DLAANet(nn.Module):
     def _init(self):
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
         
-        # 1. Katman: Sadece ilk 3 kanalı (RGB) geçirip kalan 13 kanalı sıfırlarız. (Kaiming YERİNE)
+        # 1. Katman: Identity initialization (RGB kanalları korunur)
+        # Not: Kaiming initialization yerine deterministik başlangıç kullanılmıştır.
         with torch.no_grad():
             convs[0].weight.zero_()
             for c in range(3):
                 convs[0].weight[c, c, 1, 1] = 1.0 # RGB Identity
                 
-        # 2. Katman: Identity (Zaten doğru yapmışsın)
+        # 2. Katman: Identity initialization (kanal bazlı doğrusal aktarım)
         with torch.no_grad():
             convs[1].weight.zero_()
             for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
                 convs[1].weight[c, c, 1, 1] = 1.0
         
-        # 3. Katman: Sharpening (Sadece ilk 3 kanalı kullanarak)
+        # 3. Katman: Hafif sharpening kernel (predefined edge enhancement)
         nn.init.zeros_(convs[2].weight)
         sharpen = torch.tensor([[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]], dtype=torch.float32)
         with torch.no_grad():
@@ -97,17 +100,18 @@ class _TAAState:
             self.frame_id += 1
             return frame
 
-        # GHOSTING'İ ÖLDÜREN KISIM: AGRESİF NEIGHBORHOOD CLAMPING
+        # Ghosting azaltma: neighborhood clamping ile temporal stabilizasyon
         # 3x3 komşulukta min/max sınırlarını alıyoruz.
         # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik oluyor.
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
 
         # Geçmiş kareyi mevcut frame’in renk sınırları içine çekiyoruz.
-        # Bu, ghosting etkisini ciddi şekilde azaltıyor.
+        # Temporal clamping: geçmiş frame değerlerini mevcut frame'in lokal min/max aralığına sınırlar
+        # Bu yöntem ghosting artefact'larını azaltmayı hedefler
         history_clipped = torch.clamp(self.history, local_min, local_max)
 
-        # HAREKET REDDİ (Motion Masking)
+        # Hareket maskesi: hareketli bölgelerde temporal blending etkisini azaltır
         # Mevcut kare ile kırpılmış geçmiş kare arasındaki farkı bulur.
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         
@@ -130,7 +134,7 @@ class _TAAState:
 # =========================
 class VideoTAADLAA:
     def __init__(self):
-        self.net_cache = {} # Farklı GPU cihazları için model önbelleği.
+        self.net_cache = {} # Device-specific model cache (CPU/GPU separation support)
         self.taa = _TAAState()
 
     @classmethod
@@ -164,7 +168,7 @@ class VideoTAADLAA:
 
     def jitter(self, x, idx, scale, net):
         
-        # Sub-pixel Jittering: Görüntüyü mikroskobik düzeyde kaydırarak tırtıkları yumuşatır.
+        # Sub-pixel jittering: temporal sampling çeşitliliği sağlayarak aliasing azaltmayı hedefler
         if scale < 1e-5: return x
         off = net.jitter_offsets[idx % 4]
         B, C, H, W = x.shape
@@ -179,7 +183,7 @@ class VideoTAADLAA:
 
     def edge_aa(self, x, thr, blur, net):
         
-        # Kenar Yumuşatma: Yalnızca keskin kenarları bulup hafifçe bulanıklaştırır
+        # Edge-aware anti-aliasing: kenar bölgelerinde adaptif blur uygular
         if blur <= 0: return x
         
         # Görüntüyü gri tonlamaya (Grayscale) çevirir (İnsan gözünün Luma algısına göre ağırlıklandırılmış)
@@ -210,22 +214,22 @@ class VideoTAADLAA:
         
         with torch.no_grad():
             
-            # Tüm videoyu tek seferde GPU'ya alıp OOM (Bellek Hatası) yememek için kareleri tek tek işliyoruz
+            # Frame-by-frame processing: GPU memory kullanımını azaltmak için batch yerine iteratif işleme
             for i in range(B):
                 
                 # ComfyUI [B, H, W, C] formatını PyTorch [B, C, H, W] formatına çevir
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
 
-                # 1. Aşama: Uzamsal Kaydırma (Jitter) ve Kenar Yumuşatma (Edge)
+                # 1. Stage: spatial preprocessing (jitter + edge-aware filtering)
                 rgb = self.jitter(rgb, self.taa.frame_id, jitter_scale, net)
                 rgb = self.edge_aa(rgb, edge_threshold, blur_radius, net)
 
-                # 2. Aşama: TAA (Zamansal Anti-Aliasing - Nuclear Anti-Ghosting)
+                # 2. Stage: Temporal Anti-Aliasing (history-based blending with motion masking)
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
 
-                # 3. Aşama: DLAA (Derin Öğrenme Tabanlı Keskinleştirme/Toparlama)
+                # 3. Stage: CNN-based sharpening (DL-inspired post-process)
                 if dlaa_strength > 0:
                     rgb = torch.lerp(rgb, net(rgb), dlaa_strength)
                 
