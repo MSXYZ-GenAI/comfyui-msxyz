@@ -37,26 +37,27 @@ class _DLAANet(nn.Module):
         self._init()
 
     def _init(self):
-        
-        # Ağırlıkları manuel olarak ayarlıyoruz (Eğitilmiş bir model yüklemek yerine statik filtre mantığı)
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
         
-        # İlk katman standart Kaiming başlatması
-        nn.init.kaiming_normal_(convs[0].weight)
-        
-        # İkinci katmanı kimlik (identity) matrisi olarak ayarlıyoruz (veriyi değiştirmeden geçirir)
+        # 1. Katman: Sadece ilk 3 kanalı (RGB) geçirip kalan 13 kanalı sıfırlarız. (Kaiming YERİNE)
+        with torch.no_grad():
+            convs[0].weight.zero_()
+            for c in range(3):
+                convs[0].weight[c, c, 1, 1] = 1.0 # RGB Identity
+                
+        # 2. Katman: Identity (Zaten doğru yapmışsın)
         with torch.no_grad():
             convs[1].weight.zero_()
             for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
                 convs[1].weight[c, c, 1, 1] = 1.0
         
-        # Üçüncü katmanı bir "Sharpening" (Keskinleştirme) filtresi olarak tanımlıyoruz
+        # 3. Katman: Sharpening (Sadece ilk 3 kanalı kullanarak)
         nn.init.zeros_(convs[2].weight)
         sharpen = torch.tensor([[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]], dtype=torch.float32)
         with torch.no_grad():
             for out_c in range(3):
-                for in_c in range(16):
-                    convs[2].weight[out_c, in_c] = (sharpen * 0.1) / 16.0
+                # Girdinin sadece kendisine ait kanalını keskinleştirir (Cross-channel karışıklığını önler)
+                convs[2].weight[out_c, out_c] = sharpen * 0.1
 
     def forward(self, x):
         
