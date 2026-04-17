@@ -102,7 +102,7 @@ class _TAAState:
 
         # Ghosting azaltma: neighborhood clamping ile temporal stabilizasyon
         # 3x3 komşulukta min/max sınırlarını alıyoruz.
-        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik oluyor.
+        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik.
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
 
@@ -148,7 +148,7 @@ class VideoTAADLAA:
                 "taa_alpha": ("FLOAT", {"default": 0.6, "min": 0, "max": 0.95, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.1, "min": 0, "max": 1, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.6, "min": 0, "max": 1, "step": 0.05}),
+                "dlaa_strength": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 1, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
