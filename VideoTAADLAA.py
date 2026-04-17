@@ -1,5 +1,5 @@
 # Created by MSXYZ (AI-assisted)
-# Temporal Anti-Aliasing (TAA) + Lightweight DL-style Sharpening Pipeline
+# Temporal Anti-Aliasing (TAA) + A Lightweight DL-style Sharpening Adaptation
 # v0.1.1 - Temporal stability improvements and ghosting reduction
 
 import torch
