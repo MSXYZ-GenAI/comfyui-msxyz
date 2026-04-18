@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
-# v0.1.1 - Artifact reduction + high-frequency noise fix
+# v0.1.1 - DLAANet with residual learning and orthogonal weights
 
 import torch
 import torch.nn as nn
@@ -14,45 +14,31 @@ class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
         
-        # 3-layer CNN post-process filter
-        self.conv = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 3, 3, padding=1, bias=False),
-        )
-        
+        # Sobel ve Jitter tanımları
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
-        self._init()
 
-    def _init(self):
-        convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
+        # Detay ayrıştırıcı
+        self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
+        # Doku koruyucu
+        self.refiner = nn.Conv2d(16, 16, 3, padding=1, bias=False)
+        # Artifactleri temizle
+        self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
         
-        # Layer 1: RGB Identity
-        with torch.no_grad():
-            convs[0].weight.zero_()
-            for c in range(3):
-                convs[0].weight[c, c, 1, 1] = 1.0
-                
-        # Layer 2: Linear passthrough
-        with torch.no_grad():
-            convs[1].weight.zero_()
-            for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
-                convs[1].weight[c, c, 1, 1] = 1.0
-        
-        # Layer 3: Laplacian kernel
-        nn.init.zeros_(convs[2].weight)
-        sharpen = torch.tensor([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=torch.float32)
-        with torch.no_grad():
-            for out_c in range(3):
-                convs[2].weight[out_c, out_c] = sharpen * 0.45 # Gücü artırıldı
+        # DLAANet with residual learning and orthogonal weights
+        self._init_weights()
+
+    def _init_weights(self):
+        nn.init.orthogonal_(self.extract_feature.weight)
+        nn.init.orthogonal_(self.refiner.weight)
+        nn.init.dirac_(self.reconstructor.weight) 
 
     def forward(self, x):
-        # Balanced sharpen intensity
-        return torch.clamp(x + self.conv(x) * 0.75, 0.0, 1.0)
+        features = F.leaky_relu(self.extract_feature(x), 0.2)
+        refined = F.leaky_relu(self.refiner(features), 0.2)
+        residual = self.reconstructor(refined)
+        return x + residual
 
 
 class _TAAState:
@@ -162,11 +148,15 @@ class VideoTAADLAA:
 
                 # 3. Post-Sharpen
                 if dlaa_strength > 0:
-                    rgb = torch.lerp(rgb, net(rgb), dlaa_strength)
+                    # Modelin etkisini dlaa_strength ile sınırla
+                    refined_output = net(rgb) 
+                    rgb = rgb + (refined_output - rgb) * dlaa_strength
                     
-                    # Clarity artırımı
-                    mean = torch.mean(rgb, dim=(1, 2, 3), keepdim=True) 
-                    rgb = (rgb - mean) * 1.04 + mean # %4-8 arası "berrak" hissettirir
+                    # Kontrast/clarity artırımı
+                    luma = 0.299 * rgb[:, 0:1, :, :] + 0.587 * rgb[:, 1:2, :, :] + 0.114 * rgb[:, 2:3, :, :]
+                    mean_luma = torch.mean(luma, dim=(1, 2, 3), keepdim=True)
+                   
+                    rgb = (rgb - mean_luma) * 1.02 + mean_luma
                     rgb = torch.clamp(rgb, 0.0, 1.0)
                 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
