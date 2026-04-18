@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
-# v0.1.1 - Temporal stability improvements + ghosting reduction
+# v0.1.1 - Artifact reduction + high-frequency noise fix
 
 import torch
 import torch.nn as nn
@@ -43,15 +43,17 @@ class _DLAANet(nn.Module):
             for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
                 convs[1].weight[c, c, 1, 1] = 1.0
         
-        # Layer 3: Subtle sharpening kernel
+        # Layer 3: Controlled sharpening kernel to prevent dots/artifacts
         nn.init.zeros_(convs[2].weight)
-        sharpen = torch.tensor([[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]], dtype=torch.float32)
+        # Smoother laplacian kernel (Artifact resistant)
+        sharpen = torch.tensor([[-0.25, -0.5, -0.25], [-0.5, 4.0, -0.5], [-0.25, -0.5, -0.25]], dtype=torch.float32)
         with torch.no_grad():
             for out_c in range(3):
-                convs[2].weight[out_c, out_c] = sharpen * 0.1
+                convs[2].weight[out_c, out_c] = sharpen * 0.20
 
     def forward(self, x):
-        return torch.clamp(x + self.conv(x) * 0.12, 0.0, 1.0)
+        # Balanced sharpen intensity
+        return torch.clamp(x + self.conv(x) * 0.55, 0.0, 1.0)
 
 
 class _TAAState:
@@ -76,7 +78,7 @@ class _TAAState:
 
         # Motion masking logic
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        motion_mask = torch.sigmoid((diff - sensitivity) * 20.0)
+        motion_mask = torch.sigmoid((diff - sensitivity) * 45.0)
         dynamic_alpha = alpha * (1.0 - motion_mask)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
@@ -94,12 +96,12 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.3, "min": 0, "max": 1, "step": 0.05}), 
-                "taa_alpha": ("FLOAT", {"default": 0.25, "min": 0, "max": 0.95, "step": 0.01}),   
-                "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0.01, "max": 0.5, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 1, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.3, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.01}),
+                "taa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}), 
+                "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.95, "step": 0.01}),   
+                "motion_sensitivity": ("FLOAT", {"default": 0.07, "min": 0.01, "max": 0.5, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.06, "min": 0, "max": 1, "step": 0.01}),
+                "dlaa_strength": ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
+                "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
             }
@@ -133,7 +135,7 @@ class VideoTAADLAA:
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
-        mask = torch.sigmoid((edge - thr) * 12.0)
+        mask = torch.sigmoid((edge - thr) * 18.0)
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         
         return x*(1-mask) + blurred*mask
