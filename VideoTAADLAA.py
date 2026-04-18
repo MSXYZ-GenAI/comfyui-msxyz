@@ -40,7 +40,7 @@ class _DLAANet(nn.Module):
             for i in range(3):
                 self.conv.weight[i, 0] = kernel
         
-        # Diğer fonksiyonlar (edge_aa vs.) için gerekli matrisler
+        # Diğer fonksiyonlar (edge_aa ve sobel)
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         
