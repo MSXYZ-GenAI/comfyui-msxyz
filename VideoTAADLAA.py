@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
-# Temporal Anti-Aliasing (TAA) + A Lightweight DL-style Sharpening Adaptation
-# v0.1.1 - Temporal stability improvements and ghosting reduction
+# Temporal Anti-Aliasing (TAA) + A Lightweight DLAA-style Sharpening
+# v0.1.1 - Temporal stability improvements, ghosting reduction
 
 import torch
 import torch.nn as nn
@@ -11,7 +11,7 @@ import comfy.model_management as mm
 logger = logging.getLogger("VideoTAADLAA")
 
 # =========================
-# DLAA CORE (Uzamsal Filtre & Keskinleştirme)
+# DLAA CORE
 # =========================
 class _DLAANet(nn.Module):
     """
@@ -21,18 +21,11 @@ class _DLAANet(nn.Module):
     Bu yapı gerçek bir eğitilmiş DLAA modeli değildir.
     Sadece inference-time çalışan küçük bir CNN ile
     detay keskinleştirme ve aliasing azaltma hedeflenmiştir.
-
-    Gelecekte pretrained super-resolution / restoration modelleri
-    ile değiştirilebilir şekilde tasarlanmıştır.
     """
     def __init__(self):
         super().__init__()
         
-        # Basit 3 katmanlı CNN tabanlı post-process filtre.
-        # Amaç: görüntü detaylarını hafif şekilde keskinleştirmek ve yumuşak aliasing azaltımı sağlamak.
-        # 1. Katman: Feature extraction
-        # 2. Katman: Non-linear mapping
-        # 3. Katman: Reconstruction / sharpening
+        # 3 katmanlı CNN: Feature extraction → Non-linear mapping → Sharpening
         self.conv = nn.Sequential(
             nn.Conv2d(3, 16, 3, padding=1, bias=False),
             nn.ReLU(inplace=True),
@@ -41,106 +34,82 @@ class _DLAANet(nn.Module):
             nn.Conv2d(16, 3, 3, padding=1, bias=False),
         )
         
-        # Edge Detection (Kenar Tespiti) işlemleri için kullanılacak X ve Y yönlü Sobel filtreleri
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         
-        # Sub-pixel kaydırma (Jitter) için 4 yönlü offset (kayma) koordinatları
-        self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
+        # 8-Noktalı Jitter Sekansı (Daha organik titreme, daha iyi TAA sonucu sağlar)
+        self.register_buffer("jitter_offsets", torch.tensor([
+            [0.125, 0.375], [-0.375, -0.125], [0.375, -0.375], [-0.125, 0.125],
+            [0.250, 0.250], [-0.250, -0.250], [-0.250, 0.250], [0.250, -0.250]
+        ], dtype=torch.float32))
         self._init()
 
     def _init(self):
         convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
         
-        # 1. Katman: Identity initialization (RGB kanalları korunur)
-        # Not: Kaiming initialization yerine deterministik başlangıç kullanılmıştır.
+        # Kaiming yerine deterministik başlangıç: ilk iki katman identity, son katman sharpening kernel
         with torch.no_grad():
             convs[0].weight.zero_()
             for c in range(3):
-                convs[0].weight[c, c, 1, 1] = 1.0 # RGB Identity
+                convs[0].weight[c, c, 1, 1] = 1.0
                 
-        # 2. Katman: Identity initialization (kanal bazlı doğrusal aktarım)
         with torch.no_grad():
             convs[1].weight.zero_()
             for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
                 convs[1].weight[c, c, 1, 1] = 1.0
         
-        # 3. Katman: Hafif sharpening kernel (predefined edge enhancement)
         nn.init.zeros_(convs[2].weight)
         sharpen = torch.tensor([[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]], dtype=torch.float32)
         with torch.no_grad():
             for out_c in range(3):
-                # Girdinin sadece kendisine ait kanalını keskinleştirir (Cross-channel karışıklığını önler)
                 convs[2].weight[out_c, out_c] = sharpen * 0.1
 
     def forward(self, x):
-        
-        # Residual connection: Orijinal görüntüye, ağdan çıkan keskinleştirilmiş detayları ekliyoruz
         return torch.clamp(x + self.conv(x) * 0.12, 0.0, 1.0)
 
 # =========================
-# TEMPORAL STATE (ZAMANSAL DURUM & ANTİ-GHOSTİNG)
+# TEMPORAL STATE
 # =========================
 class _TAAState:
     def __init__(self):
-        self.history = None # Önceki kareyi hafızada tutar
-        self.frame_id = 0   # Jitter döngüsü için kare sayacı
+        self.history = None
+        self.frame_id = 0
 
     def reset(self):
-        
-        # Video değiştiğinde veya kullanıcı sıfırlamak istediğinde geçmişi siler
         self.history = None
         self.frame_id = 0
 
     def update(self, frame, alpha, sensitivity):
-        
-        # İlk kareyse veya çözünürlük değiştiyse direkt mevcut kareyi geçmiş olarak kaydet
         if self.history is None or self.history.shape != frame.shape:
             self.history = frame.clone()
             self.frame_id += 1
             return frame
 
-        # Ghosting azaltma: neighborhood clamping ile temporal stabilizasyon
-        # 3x3 komşulukta min/max sınırlarını alıyoruz.
-        # Min değeri direkt bulmak yerine max_pool2d'yi ters işaretle kullanmak daha pratik oluyor.
+        # Neighborhood clamping: geçmiş kareyi mevcut frame'in 3x3 lokal min/max sınırına çeker
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
-
-        # Geçmiş kareyi mevcut frame’in renk sınırları içine çekiyoruz.
-        # Temporal clamping: geçmiş frame değerlerini mevcut frame'in lokal min/max aralığına sınırlar
-        # Bu yöntem ghosting artefact'larını azaltmayı hedefler
         history_clipped = torch.clamp(self.history, local_min, local_max)
 
-        # Hareket maskesi: hareketli bölgelerde temporal blending etkisini azaltır
-        # Mevcut kare ile kırpılmış geçmiş kare arasındaki farkı bulur.
+        # Hareketli bölgelerde alpha'yı düşür: ghosting azalır, keskin geçişler korunur
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        
-        # Hassasiyet eşiğine göre hareketli bölgelerde TAA etkisini azaltmak için bir maske oluşturur (0.0 - 1.0 arası)
         motion_mask = torch.sigmoid((diff - sensitivity) * 20.0)
-        
-        # Hareketin çok olduğu yerlerde geçmişin ağırlığını (alpha) düşürür
         dynamic_alpha = alpha * (1.0 - motion_mask)
 
-        # Mevcut kare ile geçmiş kareyi dinamik alpha değerine göre harmanlar (Blend)
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
-        
-        # Yeni geçmişi hafızaya kaydet ve sayacı artır (OOM yememek için detach() önemli)
-        self.history = out.detach()
+        self.history = out.detach()  # detach(): gradient graph birikimini önler
         self.frame_id += 1
         return out
 
 # =========================
-# MAIN NODE (COMFYUI ARAYÜZÜ)
+# MAIN NODE
 # =========================
 class VideoTAADLAA:
     def __init__(self):
-        self.net_cache = {} # Device-specific model cache (CPU/GPU separation support)
+        self.net_cache = {}  # Device başına ayrı model (CPU/GPU desteği)
         self.taa = _TAAState()
 
     @classmethod
     def INPUT_TYPES(cls):
-        
-        # ComfyUI arayüzünde görünecek ayarlar
         return {
             "required": {
                 "images": ("IMAGE",),
@@ -160,89 +129,68 @@ class VideoTAADLAA:
     CATEGORY = "CustomPostProcess"
 
     def _net(self, device):
-    
-        # Ağı ilgili cihaza (CPU/GPU) yükler ve bellekte tutar
         if device not in self.net_cache:
             self.net_cache[device] = _DLAANet().to(device).eval()
         return self.net_cache[device]
 
     def jitter(self, x, idx, scale, net):
-        
-        # Sub-pixel jittering: temporal sampling çeşitliliği sağlayarak aliasing azaltmayı hedefler
         if scale < 1e-5: return x
-        off = net.jitter_offsets[idx % 4]
+        off = net.jitter_offsets[idx % 8] # 8 noktaya güncellendi
         B, C, H, W = x.shape
-        
-        # Affine dönüşüm matrisi oluşturuluyor
         theta = torch.eye(2, 3, device=x.device).unsqueeze(0).repeat(B, 1, 1)
         theta[:, 0, 2], theta[:, 1, 2] = off[0] * scale / W, off[1] * scale / H
-        
-        # Bilinear interpolasyon ile görüntüyü kaydırır (Kaba piksel kaydırmasından çok daha kalitelidir)
         grid = F.affine_grid(theta, x.shape, align_corners=False)
         return F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
 
     def edge_aa(self, x, thr, blur, net):
-        
-        # Edge-aware anti-aliasing: kenar bölgelerinde adaptif blur uygular
         if blur <= 0: return x
-        
-        # Görüntüyü gri tonlamaya (Grayscale) çevirir (İnsan gözünün Luma algısına göre ağırlıklandırılmış)
         gray = 0.299*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
-        
-        # Sobel filtreleri ile X ve Y eksenindeki farklılıklar (kenarlar) tespit edilir
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
-        
-        # Hipotenüs hesabı ile net kenar şiddeti bulunur
-        # NaN oluşumunu önlemek için küçük epsilon eklenir
-        edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
-        
-        # Belirlenen eşik (threshold) değerine göre maske oluşturulur
+        edge = torch.sqrt(sx*sx + sy*sy + 1e-6)  # epsilon: NaN önlemi
         mask = torch.sigmoid((edge - thr) * 12.0)
-        
-        # Yansıtmalı dolgu (reflection pad) ile bulanıklaştırma yapılır
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
-        
-        # Sadece kenar olan yerlere bulanıklaştırılmış versiyon, diğer yerlere orijinal görüntü verilir
-        return x*(1-mask) + blurred*mask
+        return torch.lerp(x, blurred, mask) # Optimizasyon: x*(1-mask) + blurred*mask yerine lerp kullanıldı.
 
     def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=True):
         device = mm.get_torch_device()
         if reset_history: self.taa.reset()
         net = self._net(device)
         B, H, W, C = images.shape
+        has_alpha = (C == 4) # RGBA kontrolü
         out_list = []
         
         with torch.no_grad():
-            
-            # Frame-by-frame processing: GPU memory kullanımını azaltmak için batch yerine iteratif işleme
             for i in range(B):
-                
-                # ComfyUI [B, H, W, C] formatını PyTorch [B, C, H, W] formatına çevir
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
+                
                 rgb = img[:, :3]
+                if has_alpha:
+                    alpha_channel = img[:, 3:] # Saydamlığı güvenli bir yere al
 
-                # 1. Stage: spatial preprocessing (jitter + edge-aware filtering)
+                # Stage 1: Spatial preprocessing
                 rgb = self.jitter(rgb, self.taa.frame_id, jitter_scale, net)
                 rgb = self.edge_aa(rgb, edge_threshold, blur_radius, net)
 
-                # 2. Stage: Temporal Anti-Aliasing (history-based blending with motion masking)
+                # Stage 2: Temporal blending
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
 
-                # 3. Stage: CNN-based sharpening (DL-inspired post-process)
+                # Stage 3: CNN sharpening
                 if dlaa_strength > 0:
                     rgb = torch.lerp(rgb, net(rgb), dlaa_strength)
                 
-                # İşlenen kareyi RAM'e geri al ve tekrar ComfyUI formatına [B, H, W, C] çevir
-                out_list.append(rgb.permute(0, 2, 3, 1).cpu())
+                # Alpha kanalını geri ekle (Maskeli videoların bozulmasını engeller)
+                if has_alpha:
+                    final_tensor = torch.cat([rgb, alpha_channel], dim=1)
+                else:
+                    final_tensor = rgb
+
+                out_list.append(final_tensor.permute(0, 2, 3, 1).cpu())
                 
-                # Her 10 karede bir GPU belleğini temizleyerek kararlılığı artır
                 if i % 10 == 0: mm.soft_empty_cache()
         
-        # İşlenen tüm kareleri tek bir batch halinde ComfyUI'a döndür
         return (torch.cat(out_list, dim=0),)
 
-# ComfyUI Node Kayıt İşlemleri
 NODE_CLASS_MAPPINGS = {
     "VideoTAADLAA": VideoTAADLAA
 }
