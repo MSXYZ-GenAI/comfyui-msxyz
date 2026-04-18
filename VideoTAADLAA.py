@@ -25,44 +25,30 @@ class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
         
-        # 3 katmanlı CNN: Feature extraction → Non-linear mapping → Sharpening
-        self.conv = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 3, 3, padding=1, bias=False),
-        )
+        # R, G, B için 3 kanal (groups=3 ile ultra hızlı)
+        self.conv = nn.Conv2d(3, 3, 3, padding=1, bias=False, groups=3)
         
+        # Keskinleştirme çekirdeğini (Sharpening kernel)
+        kernel = torch.tensor([
+            [0.0, -1.0, 0.0], 
+            [-1.0, 5.0, -1.0], 
+            [0.0, -1.0, 0.0]
+        ], dtype=torch.float32) * 0.1
+        
+        # Ağırlıkları tek seferde sabitliyoruz
+        with torch.no_grad():
+            for i in range(3):
+                self.conv.weight[i, 0] = kernel
+        
+        # Diğer fonksiyonlar (edge_aa vs.) için gerekli matrisler
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         
-        # 8-Noktalı Jitter Sekansı (Daha organik titreme, daha iyi TAA sonucu sağlar)
+        # 8-Noktalı Jitter Sekansı (Daha iyi TAA sonucu sağlar)
         self.register_buffer("jitter_offsets", torch.tensor([
             [0.125, 0.375], [-0.375, -0.125], [0.375, -0.375], [-0.125, 0.125],
             [0.250, 0.250], [-0.250, -0.250], [-0.250, 0.250], [0.250, -0.250]
         ], dtype=torch.float32))
-        self._init()
-
-    def _init(self):
-        convs = [m for m in self.conv if isinstance(m, nn.Conv2d)]
-        
-        # Kaiming yerine deterministik başlangıç: ilk iki katman identity, son katman sharpening kernel
-        with torch.no_grad():
-            convs[0].weight.zero_()
-            for c in range(3):
-                convs[0].weight[c, c, 1, 1] = 1.0
-                
-        with torch.no_grad():
-            convs[1].weight.zero_()
-            for c in range(min(convs[1].weight.shape[0], convs[1].weight.shape[1])):
-                convs[1].weight[c, c, 1, 1] = 1.0
-        
-        nn.init.zeros_(convs[2].weight)
-        sharpen = torch.tensor([[0.0, -1.0, 0.0], [-1.0, 5.0, -1.0], [0.0, -1.0, 0.0]], dtype=torch.float32)
-        with torch.no_grad():
-            for out_c in range(3):
-                convs[2].weight[out_c, out_c] = sharpen * 0.1
 
     def forward(self, x):
         return torch.clamp(x + self.conv(x) * 0.12, 0.0, 1.0)
@@ -116,7 +102,7 @@ class VideoTAADLAA:
                 "taa_strength": ("FLOAT", {"default": 0.7, "min": 0, "max": 1, "step": 0.05}), 
                 "taa_alpha": ("FLOAT", {"default": 0.6, "min": 0, "max": 0.95, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.1, "min": 0, "max": 1, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.0, "min": 0, "max": 1, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.6, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 1, "min": 0, "max": 5, "step": 1}),
@@ -186,8 +172,6 @@ class VideoTAADLAA:
                     final_tensor = rgb
 
                 out_list.append(final_tensor.permute(0, 2, 3, 1).cpu())
-                
-                if i % 10 == 0: mm.soft_empty_cache()
         
         return (torch.cat(out_list, dim=0),)
 
