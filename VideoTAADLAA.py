@@ -25,6 +25,8 @@ class _TAAState:
 
     @staticmethod
     def _optical_flow(prev: torch.Tensor, curr: torch.Tensor) -> torch.Tensor:
+        # Move to CPU for OpenCV. Creates a bottleneck, but Farneback is far more 
+        # stable for TAA motion vectors than native PyTorch approximations.
         def to_gray_u8(t: torch.Tensor) -> np.ndarray:
             arr = t[0].permute(1, 2, 0).detach().cpu().numpy()
             return cv2.cvtColor((arr * 255).astype(np.uint8), cv2.COLOR_RGB2GRAY)
@@ -41,6 +43,7 @@ class _TAAState:
         H, W = flow_np.shape[:2]
         flow = torch.from_numpy(flow_np).to(curr.device).float()
 
+        # Normalize to [-1, 1] for grid_sample
         flow[..., 0] /= (W / 2.0)
         flow[..., 1] /= (H / 2.0)
 
@@ -56,13 +59,17 @@ class _TAAState:
 
         B, C, H, W = frame.shape
 
+        # Rec. 601 Luma
         luma = (
             frame[:, 0:1] * 0.299 +
             frame[:, 1:2] * 0.587 +
             frame[:, 2:3] * 0.114
         )
+        
+        # Highlight mask to prevent flickering in bright areas (Tuned: 0.75 threshold)
         highlight_mask = torch.sigmoid((luma - 0.75) * 15.0)
 
+        # 3x3 Neighborhood AABB Clipping (Negative pooling trick for max efficiency)
         local_min = -F.max_pool2d(-frame, 3, 1, 1)
         local_max = F.max_pool2d(frame, 3, 1, 1)
         history_clamped = torch.minimum(torch.maximum(self.history, local_min), local_max)
@@ -86,6 +93,7 @@ class _TAAState:
             align_corners=False,
         )
 
+        # Disocclusion mask: Drop history if flow diverges too much (threshold: 0.08)
         diff_flow = (frame - warped_history).abs().mean(dim=1, keepdim=True)
         occ_mask = torch.sigmoid((diff_flow - 0.08) * 20.0)
 
@@ -94,6 +102,7 @@ class _TAAState:
         motion = (frame - self.prev_frame).abs().mean(dim=1, keepdim=True)
         reactive = torch.sigmoid(((motion / max(sensitivity, 0.001)) - 0.3) * 10.0)
 
+        # Final blend weight calculation
         temporal_weight = alpha * (1.0 - reactive * 0.9) * (1.0 - highlight_mask * 0.85)
 
         out = torch.lerp(frame, history_mix, temporal_weight)
@@ -105,7 +114,8 @@ class _TAAState:
         return out
 
 
-def _dlaa_sharpen(rgb: torch.Tensor, strength: float) -> torch.Tensor:
+def _spatial_sharpen(rgb: torch.Tensor, strength: float) -> torch.Tensor:
+    # High-pass filter (Unsharp Mask) to recover details lost during TAA
     blurred = F.avg_pool2d(rgb, 3, 1, 1)
     detail = rgb - blurred
     sharpened = rgb + detail * 0.5
@@ -123,7 +133,7 @@ class VideoTAADLAA:
                 "images": ("IMAGE",),
                 "taa_alpha": ("FLOAT", {"default": 0.60, "min": 0.00, "max": 0.95, "step": 0.01}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.50, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.60, "min": 0.00, "max": 1.00, "step": 0.05}),
+                "sharpen_strength": ("FLOAT", {"default": 0.60, "min": 0.00, "max": 1.00, "step": 0.05}),
                 "reset_history": ("BOOLEAN", {"default": True}),
             }
         }
@@ -132,7 +142,7 @@ class VideoTAADLAA:
     FUNCTION = "execute"
     CATEGORY = "CustomPostProcess"
 
-    def execute(self, images, taa_alpha, motion_sensitivity, dlaa_strength, reset_history=True):
+    def execute(self, images, taa_alpha, motion_sensitivity, sharpen_strength, reset_history=True):
 
         device = mm.get_torch_device()
 
@@ -149,8 +159,8 @@ class VideoTAADLAA:
 
                 rgb_3 = self.taa.update(rgb_3, taa_alpha, motion_sensitivity)
 
-                if dlaa_strength > 0:
-                    rgb_3 = _dlaa_sharpen(rgb_3, dlaa_strength)
+                if sharpen_strength > 0:
+                    rgb_3 = _spatial_sharpen(rgb_3, sharpen_strength)
 
                 if C == 4:
                     rgb = torch.cat([rgb_3, rgb[:, 3:4]], dim=1)
@@ -167,5 +177,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing",
+    "VideoTAADLAA": "🎮 Video TAA + Spatial Sharpen",
 }
