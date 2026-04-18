@@ -95,8 +95,8 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}), 
-                "taa_alpha": ("FLOAT", {"default": 0.45, "min": 0, "max": 0.9, "step": 0.01}),   
+                "taa_strength": ("FLOAT", {"default": 0.60, "min": 0, "max": 1, "step": 0.05}), 
+                "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.9, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.55, "min": 0, "max": 1, "step": 0.05}),
