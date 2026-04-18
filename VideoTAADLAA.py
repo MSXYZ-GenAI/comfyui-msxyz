@@ -66,10 +66,10 @@ class _TAAState:
             frame[:, 2:3] * 0.114
         )
         
-        # Highlight mask to prevent flickering in bright areas (Tuned: 0.75 threshold)
+        # Highlight mask to prevent flickering in bright areas
         highlight_mask = torch.sigmoid((luma - 0.75) * 15.0)
 
-        # 3x3 Neighborhood AABB Clipping (Negative pooling trick for max efficiency)
+        # 3x3 Neighborhood Clipping
         local_min = -F.max_pool2d(-frame, 3, 1, 1)
         local_max = F.max_pool2d(frame, 3, 1, 1)
         history_clamped = torch.minimum(torch.maximum(self.history, local_min), local_max)
