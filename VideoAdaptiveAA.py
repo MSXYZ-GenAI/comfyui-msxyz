@@ -33,22 +33,23 @@ class VideoAdaptiveAA:
         else:
             img_rgb = img
 
-        grayscale = (
-            0.2989 * img_rgb[:, 0:1, :, :]
-            + 0.5870 * img_rgb[:, 1:2, :, :]
-            + 0.1140 * img_rgb[:, 2:3, :, :]
+        img_gray = (
+            0.2 * img_rgb[:, 0:1, :, :]
+            + 0.7 * img_rgb[:, 1:2, :, :]
+            + 0.1 * img_rgb[:, 2:3, :, :]
         )
-
-        sobel_x = torch.tensor(
+        
+        # Kenarları belirle
+        get_sobel_x = torch.tensor(
             [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
         ).view(1, 1, 3, 3).to(img.device)
 
-        sobel_y = torch.tensor(
+        get_sobel_y = torch.tensor(
             [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32
         ).view(1, 1, 3, 3).to(img.device)
 
-        edges_x = F.conv2d(grayscale, sobel_x, padding=1)
-        edges_y = F.conv2d(grayscale, sobel_y, padding=1)
+        edges_x = F.conv2d(img_gray, get_sobel_x, padding=1)
+        edges_y = F.conv2d(img_gray, get_sobel_y, padding=1)
 
         edges = torch.sqrt(edges_x**2 + edges_y**2 + 1e-6)
 
