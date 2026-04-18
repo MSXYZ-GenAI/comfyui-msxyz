@@ -49,7 +49,7 @@ class _DLAANet(nn.Module):
         sharpen = torch.tensor([[-0.25, -0.5, -0.25], [-0.5, 4.0, -0.5], [-0.25, -0.5, -0.25]], dtype=torch.float32)
         with torch.no_grad():
             for out_c in range(3):
-                convs[2].weight[out_c, out_c] = sharpen * 0.20
+                convs[2].weight[out_c, out_c] = sharpen * 0.22
 
     def forward(self, x):
         # Balanced sharpen intensity
@@ -96,12 +96,12 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}), 
-                "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.95, "step": 0.01}),   
+                "taa_strength": ("FLOAT", {"default": 0.55, "min": 0, "max": 1, "step": 0.05}), 
+                "taa_alpha": ("FLOAT", {"default": 0.45, "min": 0, "max": 0.95, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.07, "min": 0.01, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.06, "min": 0, "max": 1, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0, "max": 1, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.22, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
             }
