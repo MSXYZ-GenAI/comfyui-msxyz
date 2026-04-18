@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + DLAA-style sharpening
-# v0.1.1 - Temporal stability improvements, ghosting reduction
+# v0.1.1 - Temporal stability improvements + ghosting reduction
 
 import torch
 import torch.nn.functional as F
@@ -177,5 +177,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "VideoTAADLAA": "🎮 Video TAA + Spatial Sharpen",
+    "VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing",
 }
