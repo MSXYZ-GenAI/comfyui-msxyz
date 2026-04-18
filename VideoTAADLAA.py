@@ -103,7 +103,7 @@ class VideoTAADLAA:
                 "dlaa_strength": ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0, "max": 1, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
-                "reset_history": ("BOOLEAN", {"default": True}),
+                "reset_history": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -140,7 +140,7 @@ class VideoTAADLAA:
         
         return x*(1-mask) + blurred*mask
 
-    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=True):
+    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=False):
         device = mm.get_torch_device()
         if reset_history: self.taa.reset()
         net = self._net(device)
