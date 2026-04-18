@@ -97,11 +97,11 @@ class VideoTAADLAA:
             "required": {
                 "images": ("IMAGE",),
                 "taa_strength": ("FLOAT", {"default": 0.55, "min": 0, "max": 1, "step": 0.05}), 
-                "taa_alpha": ("FLOAT", {"default": 0.45, "min": 0, "max": 0.95, "step": 0.01}),   
+                "taa_alpha": ("FLOAT", {"default": 0.45, "min": 0, "max": 0.9, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.07, "min": 0.01, "max": 0.5, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.06, "min": 0, "max": 1, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.06, "min": 0, "max": 0.08, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.22, "min": 0, "max": 1, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.22, "min": 0, "max": 0.5, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
             }
@@ -135,7 +135,7 @@ class VideoTAADLAA:
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
-        mask = torch.sigmoid((edge - thr) * 18.0)
+        mask = torch.sigmoid((edge - thr) * 8-10)
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         
         return x*(1-mask) + blurred*mask
