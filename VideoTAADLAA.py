@@ -28,7 +28,7 @@ class _TAAState:
         self.prev_frame = None
         self.frame_id = 0
 
-    # Internal helpers
+    # Yardımcılar
     @staticmethod
     def _optical_flow(prev: torch.Tensor, curr: torch.Tensor) -> torch.Tensor:
         """
