@@ -65,7 +65,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ## 🚀 How to use
 > - Test the effect by increasing `dlaa_strength` to **0.8** or **1.0**.  
-> - If you notice ghosting behind fast-moving objects, try slightly increasing `motion_sensitivity` or decreasing `taa_alpha`.
+> - If you use it in videos with fast motion, try increasing `motion_sensitivity` or decreasing `taa_alpha`.
 
 **Parameters**
 * **`taa_strength`**: Controls the impact of past frames. *(Default: 0.6 | Fast motion: 0.7 | Static: 0.95)*
