@@ -25,13 +25,12 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 ---
 
 ## Features
-
-- **Temporal Anti-Aliasing (TAA):** Stabilizes flickering in video sequences using frame history.
-- **DLAA-inspired neural refinement:** Neural-based cleanup of residual aliasing without losing texture detail.
-- **Ghosting-Free Logic:** Advanced history clamping prevents trailing artifacts in fast motion.
-- **Halton Sequence Jittering:** Improves sub-pixel sampling for cleaner edges.
-- **Edge-Aware Weighting:** Preserves fine details while blending.
-- **Adaptive Anti-Aliasing (AdaptiveAA):** Targets only aliasing-prone regions for localized smoothing.
+- **Temporal Anti-Aliasing (TAA):** Stabilizes flickering in video sequences using frame history blending with motion-aware masking.
+- **Residual Neural Refinement:** Lightweight CNN-based residual enhancement with orthogonal-initialized weights for texture preservation.
+- **Ghosting Reduction Logic:** History clamping (local min/max constraint) combined with motion-dependent alpha suppression to reduce trailing artifacts.
+- **Fixed Pattern Jittering:** Uses a deterministic 4-offset sub-pixel jitter pattern to improve sampling stability (not Halton sequence).
+- **Edge-Aware Weighting:** Sobel-based edge detection guides selective blurring for aliasing suppression while preserving detail.
+- **Selective Edge-Based Anti-Aliasing:** Applies blur only to high-gradient regions using thresholded edge magnitude masking.
 
 ---
 
