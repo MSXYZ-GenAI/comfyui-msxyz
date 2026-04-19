@@ -14,21 +14,21 @@ class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
         
-        # Sobel ve Jitter tanımları
+        # Sobel filters and jitter
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
 
-        # Detay ayrıştırıcı
+        # Feature extractor
         self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
         
-        # Doku koruyucu
+        # Texture refinement
         self.refiner = nn.Conv2d(16, 16, 3, padding=1, bias=False)
         
-        # Artifactleri temizle
+        # Artifact removal
         self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
         
-        # DLAANet with residual learning and orthogonal weights
+        # Initialize weights (residual + orthogonal init)
         self._init_weights()
 
     def _init_weights(self):
@@ -87,7 +87,7 @@ class VideoTAADLAA:
                 "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
-                "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
+                "blur_radius": ("INT", {"default": 0, "min": 0, "max": 3, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
             }
         }
