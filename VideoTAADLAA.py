@@ -83,10 +83,10 @@ class VideoTAADLAA:
                 "images": ("IMAGE",),
                 "taa_strength": ("FLOAT", {"default": 0.60, "min": 0, "max": 1, "step": 0.05}), 
                 "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.9, "step": 0.01}),   
-                "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0.0, "max": 0.3, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 0.5, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
             }
@@ -148,18 +148,19 @@ class VideoTAADLAA:
 
                 # 3. Post-Sharpen
                 if dlaa_strength > 0:
-                    # Modelin etkisini dlaa_strength ile sınırla
+                    # Luma (Parlaklık
+                    luma_orig = 0.299 * rgb[:, 0:1, :, :] + 0.587 * rgb[:, 1:2, :, :] + 0.114 * rgb[:, 2:3, :, :]
+                    
                     refined_output = net(rgb) 
-                    rgb = rgb + (refined_output - rgb) * dlaa_strength
+                    residual = refined_output - rgb
+                    residual_luma = 0.299 * residual[:, 0:1, :, :] + 0.587 * residual[:, 1:2, :, :] + 0.114 * residual[:, 2:3, :, :]
+                    rgb = rgb + (residual_luma * dlaa_strength)
                     
-                    # Kontrast/clarity artırımı
-                    luma = 0.299 * rgb[:, 0:1, :, :] + 0.587 * rgb[:, 1:2, :, :] + 0.114 * rgb[:, 2:3, :, :]
-                    mean_luma = torch.mean(luma, dim=(1, 2, 3), keepdim=True)
-                   
-                    rgb = (rgb - mean_luma) * 1.02 + mean_luma
+                    # Clarity
+                    mean_luma = torch.mean(luma_orig, dim=(1, 2, 3), keepdim=True)
+                    rgb = (rgb - mean_luma) * 1.05 + mean_luma # Contrast
                     
-                    
-                    rgb = torch.clamp((rgb - 0.5) * 1.02 + 0.5, 0.0, 1.0)
+                    rgb = torch.clamp(rgb, 0.0, 1.0)
                 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
                 
