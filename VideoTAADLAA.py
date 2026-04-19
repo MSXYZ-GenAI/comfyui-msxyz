@@ -86,7 +86,7 @@ class VideoTAADLAA:
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
-                "edge_threshold": ("FLOAT", {"default": 0.30, "min": 0.05, "max": 0.35, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
             }
@@ -168,11 +168,11 @@ class VideoTAADLAA:
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.299*residual[:,0:1] + 0.587*residual[:,1:2] + 0.114*residual[:,2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 1.3)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.25)
                     
                     # slight contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.05 + mean_luma
+                    rgb = (rgb - mean_luma) * 1.04 + mean_luma
                     
                     rgb = torch.lerp(luma_orig, rgb, 1.15)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
