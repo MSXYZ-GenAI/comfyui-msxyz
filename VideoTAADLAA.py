@@ -21,8 +21,10 @@ class _DLAANet(nn.Module):
 
         # Detay ayrıştırıcı
         self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
+        
         # Doku koruyucu
         self.refiner = nn.Conv2d(16, 16, 3, padding=1, bias=False)
+        
         # Artifactleri temizle
         self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
         
@@ -52,8 +54,7 @@ class _TAAState:
 
     def update(self, frame, alpha, sensitivity):
         if self.history is None or self.history.shape != frame.shape:
-            self.history = frame.clone()
-            self.frame_id += 1
+            self.history = frame.detach().clone().to(frame.device)
             return frame
 
         # Neighborhood clamping for stability
@@ -61,14 +62,13 @@ class _TAAState:
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
         history_clipped = torch.clamp(self.history, local_min, local_max)
 
-        # Motion masking logic
+        # Motion masking
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         motion_mask = torch.sigmoid((diff - sensitivity) * 45.0)
         dynamic_alpha = alpha * (1.0 - motion_mask)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
         self.history = out.detach()
-        self.frame_id += 1
         return out
 
 class VideoTAADLAA:
@@ -80,15 +80,15 @@ class VideoTAADLAA:
     def INPUT_TYPES(cls):
         return {
             "required": {
-            "images": ("IMAGE",),
-            "taa_strength": ("FLOAT", {"default": 0.60, "min": 0, "max": 1, "step": 0.05}),
-            "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.9, "step": 0.01}),
-            "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0.0, "max": 0.3, "step": 0.01}),
-            "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
-            "dlaa_strength": ("FLOAT", {"default": 0.30, "min": 0, "max": 1, "step": 0.01}),
-            "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0.05, "max": 0.35, "step": 0.01}),
-            "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
-            "reset_history": ("BOOLEAN", {"default": False}),
+                "images": ("IMAGE",),
+                "taa_strength": ("FLOAT", {"default": 0.60, "min": 0, "max": 1, "step": 0.05}),
+                "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.9, "step": 0.01}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0.0, "max": 0.3, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
+                "dlaa_strength": ("FLOAT", {"default": 0.30, "min": 0, "max": 1, "step": 0.01}),
+                "edge_threshold": ("FLOAT", {"default": 0.20, "min": 0.05, "max": 0.35, "step": 0.01}),
+                "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
+                "reset_history": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -97,9 +97,10 @@ class VideoTAADLAA:
     CATEGORY = "CustomPostProcess"
 
     def _net(self, device):
-        if device not in self.net_cache:
-            self.net_cache[device] = _DLAANet().to(device).eval()
-        return self.net_cache[device]
+        key = str(device)
+        if key not in self.net_cache:
+            self.net_cache[key] = _DLAANet().to(device).eval()
+        return self.net_cache[key]
 
     def jitter(self, x, idx, scale, net):
         if scale < 1e-5: return x
@@ -125,53 +126,65 @@ class VideoTAADLAA:
         
         return x*(1-mask) + blurred*mask
 
-    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity, jitter_scale, dlaa_strength, edge_threshold, blur_radius, reset_history=False):
+    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity,
+                jitter_scale, dlaa_strength, edge_threshold,
+                blur_radius, reset_history=False):
+
         device = mm.get_torch_device()
-        if reset_history: self.taa.reset()
+
+        if reset_history:
+            self.taa.reset()
+            torch.cuda.empty_cache()
+
         net = self._net(device)
+
         B, H, W, C = images.shape
         out_list = []
-        
+
         with torch.no_grad():
             for i in range(B):
-                # NCHW conversion
+                # convert to NCHW for PyTorch
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
+                # split RGB channels
                 rgb = img[:, :3]
 
-                # 1. Spatial Preprocessing
-                rgb = self.jitter(rgb, self.taa.frame_id, jitter_scale, net)
+                # 1. spatial preprocessing step
+                fid = self.taa.frame_id
+                self.taa.frame_id = (fid + 1) % 10000
+                
+                rgb = self.jitter(rgb, fid, jitter_scale, net)
                 rgb = self.edge_aa(rgb, edge_threshold, blur_radius, net)
-
-                # 2. Temporal Pass
+                
+                # 2. temporal update
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
-
-                # 3. Sharpening
+                
+                # 3. sharpening pass
                 if dlaa_strength > 0:
-                    # Get luma 
-                    luma_orig = 0.299 * rgb[:, 0:1, :, :] + 0.587 * rgb[:, 1:2, :, :] + 0.114 * rgb[:, 2:3, :, :]
-                    refined_output = net(rgb) 
+                    # compute luma from original image
+                    luma_orig = 0.299*rgb[:,0:1] + 0.587*rgb[:,1:2] + 0.114*rgb[:,2:3]
+                    refined_output = net(rgb)
                     residual = refined_output - rgb
                     
-                    # Apply residual to luma only to avoid saturation shifts
-                    luma_res = 0.299 * residual[:, 0:1, :, :] + 0.587 * residual[:, 1:2, :, :] + 0.114 * residual[:, 2:3, :, :]
+                    # apply residual mostly to luminance to avoid color shifts
+                    luma_res = 0.299*residual[:,0:1] + 0.587*residual[:,1:2] + 0.114*residual[:,2:3]
                     rgb = rgb + (luma_res * dlaa_strength * 1.3)
                     
-                    # Contrast
-                    mean_luma = torch.mean(luma_orig, dim=(1, 2, 3), keepdim=True)
+                    # slight contrast adjustment
+                    mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
                     rgb = (rgb - mean_luma) * 1.02 + mean_luma
                     
-                    # Fine-tune
-                    rgb[:, 0:1, :, :] *= 0.995
-                    rgb[:, 2:3, :, :] *= 1.005
-                    
+                    # tiny channel tweak
+                    # rgb[:,0:1] *= 0.995
+                    # rgb[:,2:3] *= 1.005
+
                     rgb = torch.clamp(rgb, 0.0, 1.0)
-                    
-                
-                out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-                
-                if i % 10 == 0: mm.soft_empty_cache()
-        
+
+                out_list.append(rgb.permute(0,2,3,1).cpu())
+
+                if i % 10 == 0:
+                    mm.soft_empty_cache()
+
         return (torch.cat(out_list, dim=0),)
 
 NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
