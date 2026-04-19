@@ -65,6 +65,11 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ### Parameters
 
+> **Note**
+> - Test the effect by increasing `dlaa_strength` to **0.8** or **1.0**.  
+> - Gradually raise `dlaa_strength` to observe how image sharpness and edge clarity improve, resulting in a more pronounced, almost “glassy” look.  
+> - If you notice ghosting behind fast-moving objects, try slightly increasing `motion_sensitivity` or decreasing `taa_alpha`.
+
 **TAA & DLAA Parameters**
 * **`taa_strength`**: Controls the impact of past frames. *(Rec: 0.9 | Fast motion: 0.7 | Static: 0.95)*
 * **`taa_alpha`**: Determines how quickly history updates. *(Rec: 0.1 | Aggressive AA: 0.3 | Ghost-free: 0.05)*
