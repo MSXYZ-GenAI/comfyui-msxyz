@@ -30,7 +30,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 - **Ghosting Reduction Logic:** History clamping with motion-based alpha suppression to minimize trailing artifacts.
 - **Fixed Pattern Jittering:** Deterministic 4-offset sub-pixel jitter for improved sampling stability (not Halton).
 - **Edge-Aware Weighting:** Sobel edge detection for selective blurring to suppress aliasing while preserving details.
-- **Selective Edge-Based Anti-Aliasing:** Applies blur only to high-gradient areas using thresholded edge magnitude masks.
+- **Selective Edge-Based Anti-Aliasing:** Applies blur to high-gradient areas using edge threshold masks.
 
 ---
 
