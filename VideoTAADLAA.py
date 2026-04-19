@@ -146,22 +146,22 @@ class VideoTAADLAA:
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
 
-                # 3. Sharpen
+                # 3. Sharpening
                 if dlaa_strength > 0:
-                    # Luma 
+                    # Get luma 
                     luma_orig = 0.299 * rgb[:, 0:1, :, :] + 0.587 * rgb[:, 1:2, :, :] + 0.114 * rgb[:, 2:3, :, :]
                     refined_output = net(rgb) 
                     residual = refined_output - rgb
                     
-                    # Residual Luma
+                    # Apply residual to luma only to avoid saturation shifts
                     luma_res = 0.299 * residual[:, 0:1, :, :] + 0.587 * residual[:, 1:2, :, :] + 0.114 * residual[:, 2:3, :, :]
-                    rgb = rgb + (luma_res * dlaa_strength * 1.5)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.3)
                     
-                    # Color Preservation
+                    # Contrast
                     mean_luma = torch.mean(luma_orig, dim=(1, 2, 3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.03 + mean_luma
+                    rgb = (rgb - mean_luma) * 1.02 + mean_luma
                     
-                    # White Balance
+                    # Fine-tune
                     rgb[:, 0:1, :, :] *= 0.995
                     rgb[:, 2:3, :, :] *= 1.005
                     
