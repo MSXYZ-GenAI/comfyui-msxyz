@@ -119,7 +119,7 @@ class VideoTAADLAA:
         if blur <= 0: return x
         
         # Grayscale for edge detection
-        gray = 0.299*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
+        gray = 0.2126 * x[:, 0:1] + 0.7152 * x[:, 1:2] + 0.0722 * x[:, 2:3]
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
@@ -153,7 +153,7 @@ class VideoTAADLAA:
 
                 # 1. spatial preprocessing step
                 fid = self.taa.frame_id
-                self.taa.frame_id = (fid + 1) % 10000
+                self.taa.frame_id = (fid + 1) % 4
                 
                 rgb = self.jitter(rgb, fid, jitter_scale, net)
                 rgb = self.edge_aa(rgb, edge_threshold, blur_radius, net)
@@ -165,12 +165,12 @@ class VideoTAADLAA:
                 # 3. sharpening pass
                 if dlaa_strength > 0:
                     # compute luma from original image
-                    luma_orig = 0.299*rgb[:,0:1] + 0.587*rgb[:,1:2] + 0.114*rgb[:,2:3]
+                    luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
                     refined_output = net(rgb)
                     residual = refined_output - rgb
                     
                     # apply residual mostly to luminance to avoid color shifts
-                    luma_res = 0.299*residual[:,0:1] + 0.587*residual[:,1:2] + 0.114*residual[:,2:3]
+                    luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
                     rgb = rgb + (luma_res * dlaa_strength * 1.25)
                     
                     # slight contrast adjustment
