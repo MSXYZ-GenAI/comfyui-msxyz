@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
-# v0.1.1 - DLAANet with residual learning and orthogonal weights
+# v0.1.1 - Optimized DLAANet, Improved Stability
 
 import torch
 import torch.nn as nn
@@ -10,6 +10,7 @@ import comfy.model_management as mm
 
 logger = logging.getLogger("VideoTAADLAA")
 
+# Load pretrained weights when available
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -71,6 +72,7 @@ class _TAAState:
         self.history = out.detach()
         return out
 
+# Currently runs as deterministic
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
@@ -88,7 +90,7 @@ class VideoTAADLAA:
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 3, "step": 1}),
-                "reset_history": ("BOOLEAN", {"default": False}),
+                "reset_history": ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -128,7 +130,7 @@ class VideoTAADLAA:
 
     def execute(self, images, taa_strength, taa_alpha, motion_sensitivity,
                 jitter_scale, dlaa_strength, edge_threshold,
-                blur_radius, reset_history=False):
+                blur_radius, reset_history=True):
 
         device = mm.get_torch_device()
 
@@ -143,6 +145,7 @@ class VideoTAADLAA:
 
         with torch.no_grad():
             for i in range(B):
+                logger.debug(f"Frame {i+1}/{B}")
                 # convert to NCHW for PyTorch
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 # split RGB channels
@@ -174,7 +177,6 @@ class VideoTAADLAA:
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
                     rgb = (rgb - mean_luma) * 1.04 + mean_luma
                     
-                    rgb = torch.lerp(luma_orig, rgb, 1.15)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 out_list.append(rgb.permute(0,2,3,1).cpu())
