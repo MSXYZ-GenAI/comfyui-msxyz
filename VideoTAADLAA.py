@@ -43,7 +43,7 @@ class _DLAANet(nn.Module):
         residual = self.reconstructor(refined)
         return x + residual
 
-
+# Temporal Anti-Aliasing (TAA)
 class _TAAState:
     def __init__(self):
         self.history = None
@@ -171,7 +171,7 @@ class VideoTAADLAA:
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 1.25)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.3)
                     
                     # slight contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
