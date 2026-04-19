@@ -70,6 +70,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 **Parameters**
 * **`taa_strength`**: Controls the impact of past frames. *(Default: 0.6 | Fast motion: 0.7 | Static: 0.95)*
 * **`taa_alpha`**: Determines how quickly history updates. *(Default: 0.4 | Aggressive AA: 0.3 | Ghost-free: 0.05)*
+* **`motion_sensitivity`**: For high-speed videos, try decreasing. *(Default: 0.08 | Flicker-prone: 0.0 | Ghosting Risk: 0.3)*
 * **`jitter_scale`**: Amount of sub-pixel shifting for edge detection. *(Default: 0.02 | Off: 0.0 | Maximum: 0.08)*
 * **`dlaa_strength`**: Strength of the deep learning sharpening. *(Default: 0.3 | Pure AA: 0.0 | Aggressive: 1.0)*
 * **`edge_threshold`**: Determines which pixels are detected as edges. *(Default: 0.2 | Hard edges: 0.35 | All: 0.05)*
