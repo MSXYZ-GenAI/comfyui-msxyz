@@ -81,11 +81,11 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}), 
+                "taa_strength": ("FLOAT", {"default": 0.60, "min": 0, "max": 1, "step": 0.05}), 
                 "taa_alpha": ("FLOAT", {"default": 0.40, "min": 0, "max": 0.9, "step": 0.01}),   
                 "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.01, "max": 0.5, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.30, "min": 0, "max": 1, "step": 0.05}),
+                "dlaa_strength": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0, "max": 0.5, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": False}),
@@ -120,7 +120,7 @@ class VideoTAADLAA:
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
-        mask = torch.sigmoid((edge - thr) * 15.0)
+        mask = torch.sigmoid((edge - thr) * 8.0)
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         
         return x*(1-mask) + blurred*mask
@@ -157,9 +157,9 @@ class VideoTAADLAA:
                     mean_luma = torch.mean(luma, dim=(1, 2, 3), keepdim=True)
                    
                     rgb = (rgb - mean_luma) * 1.02 + mean_luma
-                    rgb[:, 2:3, :, :] += 0.025
-                    rgb[:, 0:1, :, :] -= 0.010
-                    rgb = torch.clamp(rgb, 0.0, 1.0)
+                    
+                    
+                    rgb = torch.clamp((rgb - 0.5) * 1.02 + 0.5, 0.0, 1.0)
                 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
                 
