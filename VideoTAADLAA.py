@@ -166,7 +166,7 @@ class VideoTAADLAA:
 
         # Baseline calibration
         actual_brightness = brightness * 1.5
-        actual_contrast = contrast * 0.5
+        actual_contrast = contrast * 1.0
         actual_gamma = gamma * 1.5
 
         with torch.no_grad():
