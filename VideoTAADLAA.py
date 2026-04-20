@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
-# v0.1.1 - DLAANet with residual learning and orthogonal weights
+# v0.1.1 - Active Weights, MSE Monitoring & Pixel Integrity
 
 import torch
 import torch.nn as nn
