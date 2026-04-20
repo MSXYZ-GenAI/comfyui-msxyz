@@ -196,17 +196,17 @@ class VideoTAADLAA:
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 25.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 32.0)
                     
                     # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.25 + (mean_luma * 1.07)
-                    rgb = torch.pow(rgb, 0.90)
+                    rgb = (rgb - mean_luma) * 1.03 + (mean_luma * 1.22)
+                    rgb = torch.pow(rgb, 0.88)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
-
+                    
                 out_list.append(rgb.permute(0,2,3,1).cpu())
-
+                
                 if i % 10 == 0:
                     mm.soft_empty_cache()
 
