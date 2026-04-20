@@ -85,7 +85,7 @@ class VideoTAADLAA:
                 "jitter_scale": ("FLOAT", {"default": 0.1, "min": 0, "max": 1, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
-                "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
+                "blur_radius": ("INT", {"default": 0, "min": 0, "max": 3, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
             }
         }
@@ -99,11 +99,18 @@ class VideoTAADLAA:
         if key not in self.net_cache:
             net = _DLAANet().to(device)
             
-            # Pretrained weight load
             base_path = os.path.dirname(os.path.realpath(__file__))
             path = os.path.join(base_path, "dlaanet.pth")
+            
+            try:
+                state_dict = torch.load(path, map_location=device, weights_only=True)
+                net.load_state_dict(state_dict)
+            except Exception:
+                pass # if an error, do nothing; let the program continue with random/dirac weights
+            
             net.eval()
             self.net_cache[key] = net
+            
         return self.net_cache[key]
 
     def jitter(self, x, idx, scale, net):
@@ -163,12 +170,15 @@ class VideoTAADLAA:
                     luma_orig = 0.2126*rgb[:,0:1] + 0.7152*rgb[:,1:2] + 0.0722*rgb[:,2:3]
 
                     refined_output = torch.clamp(net(rgb), 0.0, 1.0)
+                    diff_check = torch.mean((refined_output - rgb) ** 2).item()
+                    if i == 0: 
+                        print(f"\033[92m[DLAA] Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
                     residual = refined_output - rgb
 
                     luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
                     
-                    rgb = rgb + (luma_res * dlaa_strength * 1.25)
-                    rgb = rgb * (1.0 + dlaa_strength * 0.3)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.5)
+                    rgb = rgb * (1.0 + dlaa_strength * 0.5)
 
                     rgb = torch.pow(rgb, 0.98)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
