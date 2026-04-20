@@ -36,7 +36,7 @@ class _DLAANet(nn.Module):
     def _init_weights(self):
         nn.init.orthogonal_(self.extract_feature.weight)
         nn.init.orthogonal_(self.refiner.weight)
-        nn.init.dirac_(self.reconstructor.weight) 
+        nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
         features = F.leaky_relu(self.extract_feature(x), 0.2)
@@ -90,6 +90,9 @@ class VideoTAADLAA:
                 "jitter_scale": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.4, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
+                "brightness": ("FLOAT", {"default": 1.0, "min": 0.5, "max": 1.5, "step": 0.05}),
+                "contrast": ("FLOAT", {"default": 1.0, "min": 0.5, "max": 1.5, "step": 0.05}),
+                "gamma": ("FLOAT", {"default": 1.0, "min": 0.5, "max": 2.5, "step": 0.05}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 3, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
             }
@@ -147,6 +150,7 @@ class VideoTAADLAA:
 
     def execute(self, images, taa_strength, taa_alpha, motion_sensitivity,
                 jitter_scale, dlaa_strength, edge_threshold,
+                brightness, contrast, gamma,
                 blur_radius, reset_history=True):
 
         device = mm.get_torch_device()
@@ -179,10 +183,8 @@ class VideoTAADLAA:
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
                 
-                # 3. sharpening pass
+                # 3. sharpening pass (DLAA)
                 if dlaa_strength > 0:
-                    # compute luma from original image
-                    luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
                     refined_output = net(rgb)
                     
                     # Debug
@@ -194,15 +196,19 @@ class VideoTAADLAA:
                     
                     residual = refined_output - rgb
                     
-                    # apply residual mostly to luminance to avoid color shifts
+                    # 1. Keskinlik x3
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 32.0)
-                    
-                    # slight gamma & contrast adjustment
-                    mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.03 + (mean_luma * 1.22)
-                    rgb = torch.pow(rgb, 0.88)
-                    
+                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
+
+                    # 4. Color & Light Correction
+                    if brightness != 1.0 or contrast != 1.0 or gamma != 1.0:
+
+                        luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
+                        mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
+                        
+                        rgb = (rgb - mean_luma) * contrast + (mean_luma * brightness)
+                        rgb = torch.pow(torch.clamp(rgb, 0.001, 1.0), gamma)
+
                     rgb = torch.clamp(rgb, 0.0, 1.0)
                     
                 out_list.append(rgb.permute(0,2,3,1).cpu())
