@@ -10,7 +10,7 @@ import comfy.model_management as mm
 
 logger = logging.getLogger("VideoTAADLAA")
 
-# Load pretrained weights when available
+# Initialized with procedural weights (Ready for pretrained weights in future updates)
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -72,7 +72,7 @@ class _TAAState:
         self.history = out.detach()
         return out
 
-# Currently runs as deterministic
+# Main Node
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
