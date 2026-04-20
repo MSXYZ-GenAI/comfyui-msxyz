@@ -193,7 +193,6 @@ class VideoTAADLAA:
                             print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
                     
                     residual = refined_output - rgb
-                    luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
