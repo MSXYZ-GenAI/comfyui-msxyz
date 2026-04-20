@@ -84,7 +84,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.05}),
+                "taa_strength": ("FLOAT", {"default": 0.30, "min": 0, "max": 1, "step": 0.05}),
                 "taa_alpha": ("FLOAT", {"default": 0.20, "min": 0, "max": 0.9, "step": 0.01}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.4, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.4, "step": 0.01}),
@@ -193,7 +193,8 @@ class VideoTAADLAA:
                             print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
                     
                     residual = refined_output - rgb
-                    rgb = rgb + (residual * dlaa_strength * 2.0)
+                    luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
+                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
@@ -201,7 +202,8 @@ class VideoTAADLAA:
                     
                     # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.25 + mean_luma
+                    rgb = (rgb - mean_luma) * 1.18 + (mean_luma * 1.06)
+                    rgb = torch.pow(rgb, 0.92)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
