@@ -5,8 +5,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import logging
 import comfy.model_management as mm
+import os
+import logging
 
 logger = logging.getLogger("VideoTAADLAA")
 
@@ -19,7 +20,7 @@ class _DLAANet(nn.Module):
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
-
+        
         # Feature extractor
         self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
         
@@ -83,11 +84,11 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
-                "taa_alpha": ("FLOAT", {"default": 0.30, "min": 0, "max": 0.9, "step": 0.01}),
-                "motion_sensitivity": ("FLOAT", {"default": 0.05, "min": 0.0, "max": 0.3, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.02, "min": 0, "max": 0.08, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
+                "taa_strength": ("FLOAT", {"default": 0.25, "min": 0, "max": 1, "step": 0.05}),
+                "taa_alpha": ("FLOAT", {"default": 0.20, "min": 0, "max": 0.9, "step": 0.01}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.4, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.4, "step": 0.01}),
+                "dlaa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 3, "step": 1}),
                 "reset_history": ("BOOLEAN", {"default": True}),
@@ -101,9 +102,25 @@ class VideoTAADLAA:
     def _net(self, device):
         key = str(device)
         if key not in self.net_cache:
-            self.net_cache[key] = _DLAANet().to(device).eval()
-        return self.net_cache[key]
+            net = _DLAANet().to(device)
+            # Pretrained weight load
+            base_path = os.path.dirname(os.path.realpath(__file__))
+            path = os.path.join(base_path, "dlaa.pth")
+            
+            if os.path.exists(path):
+                try:
+                    state_dict = torch.load(path, map_location=device)
+                    net.load_state_dict(state_dict, strict=False)
+                    print(f"\033[92m[DLAA] Model Loaded Successfully: \033[0m{os.path.basename(path)}")
+                except Exception as e:
+                    print(f"VideoTAADLAA: Model loading error: {e}")
+            else:
+                print(f"\033[92m[DLAA] WARNING! {path} Not found. Default settings are being used.")
 
+            net.eval()
+            self.net_cache[key] = net
+        return self.net_cache[key]
+        
     def jitter(self, x, idx, scale, net):
         if scale < 1e-5: return x
         off = net.jitter_offsets[idx % 4]
@@ -167,15 +184,24 @@ class VideoTAADLAA:
                     # compute luma from original image
                     luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
                     refined_output = net(rgb)
+                    
+                    # Debug
+                    diff_check = torch.abs(refined_output - rgb).mean().item()
+                    if i == 0: # Sadece ilk karede yazdır
+                        print(f"\033[92m[DLAA] DLAA Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
+                        if diff_check < 1e-6:
+                            print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
+                    
                     residual = refined_output - rgb
+                    rgb = rgb + (residual * dlaa_strength * 2.0)
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 1.3)
+                    rgb = rgb + (luma_res * dlaa_strength * 4.0)
                     
-                    # slight contrast adjustment
+                    # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.04 + mean_luma
+                    rgb = (rgb - mean_luma) * 1.25 + mean_luma
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
