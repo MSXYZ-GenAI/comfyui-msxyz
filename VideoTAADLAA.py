@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
-# v0.1.1 - Optimized DLAANet, Improved Stability
+# v0.1.1 - Fix DLAANet weight loading, Improved Stability
 
 import torch
 import torch.nn as nn
@@ -198,7 +198,7 @@ class VideoTAADLAA:
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 4.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 7.0)
                     
                     # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
