@@ -203,7 +203,7 @@ class VideoTAADLAA:
                     
                     # Sharpening x3
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 5.0)
                     
                 # 4. Color Correction
                 if actual_brightness != 1.0 or actual_contrast != 1.0 or actual_gamma != 1.0:
