@@ -179,7 +179,8 @@ class VideoTAADLAA:
                     
                     rgb = rgb + (luma_res * dlaa_strength * 1.5)
                     rgb = rgb * (1.0 + dlaa_strength * 0.5)
-
+                    
+                    rgb = torch.clamp(rgb, 0.0, 1.0)
                     rgb = torch.pow(rgb, 0.98)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
