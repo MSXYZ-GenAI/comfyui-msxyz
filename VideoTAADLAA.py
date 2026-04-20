@@ -80,9 +80,9 @@ class VideoTAADLAA:
             "required": {
                 "images": ("IMAGE",),
                 "taa_strength": ("FLOAT", {"default": 0.30, "min": 0, "max": 1, "step": 0.05}),
-                "taa_alpha": ("FLOAT", {"default": 0.25, "min": 0, "max": 0.9, "step": 0.01}),
+                "taa_alpha": ("FLOAT", {"default": 0.20, "min": 0, "max": 0.9, "step": 0.01}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.3, "step": 0.01}),
-                "jitter_scale": ("FLOAT", {"default": 0.2, "min": 0, "max": 1, "step": 0.01}),
+                "jitter_scale": ("FLOAT", {"default": 0.1, "min": 0, "max": 1, "step": 0.01}),
                 "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "blur_radius": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
@@ -167,7 +167,6 @@ class VideoTAADLAA:
 
                     luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
                     
-                    # Magic Numbers
                     rgb = rgb + (luma_res * dlaa_strength * 1.25)
                     rgb = rgb * (1.0 + dlaa_strength * 0.3)
 
