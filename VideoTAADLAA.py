@@ -202,7 +202,7 @@ class VideoTAADLAA:
                     
                     # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.18 + (mean_luma * 1.06)
+                    rgb = (rgb - mean_luma) * 1.2 + (mean_luma * 1.06)
                     rgb = torch.pow(rgb, 0.92)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
