@@ -164,6 +164,11 @@ class VideoTAADLAA:
         B, H, W, C = images.shape
         out_list = []
 
+        # Baseline calibration
+        actual_brightness = brightness * 1.5
+        actual_contrast = contrast * 0.5
+        actual_gamma = gamma * 1.5
+
         with torch.no_grad():
             for i in range(B):
                 logger.debug(f"Frame {i+1}/{B}")
@@ -189,33 +194,32 @@ class VideoTAADLAA:
                     
                     # Debug
                     diff_check = torch.abs(refined_output - rgb).mean().item()
-                    if i == 0: # Print only the first frame
+                    if i == 0: # Sadece ilk karede yazdır
                         print(f"\033[92m[DLAA] Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
                         if diff_check < 1e-6:
                             print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
-                    
+                            
                     residual = refined_output - rgb
                     
-                    # Sharpening
+                    # Sharpening x3
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 6.0)
-
-                    # Color Correction
-                    if brightness != 1.0 or contrast != 1.0 or gamma != 1.0:
-
-                        luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
-                        mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                        
-                        rgb = (rgb - mean_luma) * contrast + (mean_luma * brightness)
-                        rgb = torch.pow(torch.clamp(rgb, 0.001, 1.0), gamma)
-
-                    rgb = torch.clamp(rgb, 0.0, 1.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
                     
+                # 4. Color Correction
+                if actual_brightness != 1.0 or actual_contrast != 1.0 or actual_gamma != 1.0:
+                    luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
+                    mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
+                    
+                    rgb = (rgb - mean_luma) * actual_contrast + (mean_luma * actual_brightness)
+                    rgb = torch.pow(torch.clamp(rgb, 0.001, 1.0), actual_gamma)
+                    
+                rgb = torch.clamp(rgb, 0.0, 1.0)
+                
                 out_list.append(rgb.permute(0,2,3,1).cpu())
                 
                 if i % 10 == 0:
                     mm.soft_empty_cache()
-
+                    
         return (torch.cat(out_list, dim=0),)
 
 NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
