@@ -188,7 +188,7 @@ class VideoTAADLAA:
                     # Debug
                     diff_check = torch.abs(refined_output - rgb).mean().item()
                     if i == 0: # Sadece ilk karede yazdır
-                        print(f"\033[92m[DLAA] DLAA Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
+                        print(f"\033[92m[DLAA] Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
                         if diff_check < 1e-6:
                             print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
                     
