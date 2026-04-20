@@ -88,7 +88,7 @@ class VideoTAADLAA:
                 "taa_alpha": ("FLOAT", {"default": 0.20, "min": 0, "max": 0.9, "step": 0.01}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 0.4, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.4, "step": 0.01}),
-                "dlaa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
+                "dlaa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}),
                 "edge_threshold": ("FLOAT", {"default": 0.25, "min": 0.05, "max": 0.35, "step": 0.01}),
                 "brightness": ("FLOAT", {"default": 1.0, "min": 0.5, "max": 1.5, "step": 0.05}),
                 "contrast": ("FLOAT", {"default": 1.0, "min": 0.5, "max": 1.5, "step": 0.05}),
@@ -189,18 +189,18 @@ class VideoTAADLAA:
                     
                     # Debug
                     diff_check = torch.abs(refined_output - rgb).mean().item()
-                    if i == 0: # Sadece ilk karede yazdır
+                    if i == 0: # Print only the first frame
                         print(f"\033[92m[DLAA] Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
                         if diff_check < 1e-6:
                             print("\033[92m[DLAA] Model output unchanged. Weights may not be loaded correctly.")
                     
                     residual = refined_output - rgb
                     
-                    # 1. Keskinlik x3
+                    # Sharpening
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 6.0)
 
-                    # 4. Color & Light Correction
+                    # Color Correction
                     if brightness != 1.0 or contrast != 1.0 or gamma != 1.0:
 
                         luma_orig = 0.2126 * rgb[:, 0:1] + 0.7152 * rgb[:, 1:2] + 0.0722 * rgb[:, 2:3]
