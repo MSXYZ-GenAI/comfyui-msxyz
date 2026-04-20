@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger("VideoTAADLAA")
 
-# Initialized with procedural weights (Ready for pretrained weights in future updates)
+# Deep Learning Anti-Aliasing (DLAA) refinement
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -105,7 +105,7 @@ class VideoTAADLAA:
             net = _DLAANet().to(device)
             # Pretrained weight load
             base_path = os.path.dirname(os.path.realpath(__file__))
-            path = os.path.join(base_path, "dlaa.pth")
+            path = os.path.join(base_path, "dlaanet.pth")
             
             if os.path.exists(path):
                 try:
@@ -194,16 +194,15 @@ class VideoTAADLAA:
                     
                     residual = refined_output - rgb
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 3.0)
                     
                     # apply residual mostly to luminance to avoid color shifts
                     luma_res = 0.2126 * residual[:, 0:1] + 0.7152 * residual[:, 1:2] + 0.0722 * residual[:, 2:3]
-                    rgb = rgb + (luma_res * dlaa_strength * 7.0)
+                    rgb = rgb + (luma_res * dlaa_strength * 23.0)
                     
                     # slight gamma & contrast adjustment
                     mean_luma = torch.mean(luma_orig, dim=(1,2,3), keepdim=True)
-                    rgb = (rgb - mean_luma) * 1.2 + (mean_luma * 1.06)
-                    rgb = torch.pow(rgb, 0.92)
+                    rgb = (rgb - mean_luma) * 1.22 + (mean_luma * 1.07)
+                    rgb = torch.pow(rgb, 0.90)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
