@@ -57,7 +57,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 <p align="center">
   <strong>TAA + DLAA Comparison</strong>
   <br>
-  <img src="Compare_3.png" width="650">
+  <img src="compare_3.png" width="650">
 </p>
 
 ---
