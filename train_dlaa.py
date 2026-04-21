@@ -1,10 +1,10 @@
 # Created by MSXYZ
 
 # Training DLAA model
-# This repository includes a simple training script (train_dlaa.py) for fine-tuning the model.
+# This file includes a simple training script (train_dlaa.py) for fine-tuning the model.
 
 # Steps:
-# 1. Create a folder named `dataset` next to this script.
+# 1. Create a folder named "dataset" next to this script.
 # 2. Add around 50–100 high-quality images (landscapes, portraits, or simple geometric patterns).
 # 3. Open a terminal in this directory and run:
 #    python train_dlaa.py
