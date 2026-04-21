@@ -30,19 +30,19 @@ class _DLAANet(nn.Module):
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
 
-        self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
+        self.extract_feature = nn.Conv2d(3, 32, 3, padding=1, bias=False)
         self.refiner = nn.Sequential(
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 16),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 32),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 16),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 32),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
         )
-        self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
+        self.reconstructor = nn.Conv2d(32, 3, 3, padding=1, bias=False)
 
         self._init_weights()
 
@@ -74,7 +74,7 @@ class DLAADataset(Dataset):
         ])
 
         self.input_transform = transforms.Compose([
-            transforms.Resize((128, 128), interpolation=transforms.InterpolationMode.BICUBIC), 
+            transforms.Resize((64, 64), interpolation=transforms.InterpolationMode.BICUBIC), 
             
             # Downsampling
             transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.NEAREST),
@@ -105,7 +105,7 @@ def train():
     criterion = nn.L1Loss() 
     optimizer = optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999))
 
-    epochs = 200
+    epochs = 300
 
     for epoch in range(epochs):
         model.train()
@@ -129,7 +129,7 @@ def train():
 
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss/len(dataloader):.4f}")
 
-    torch.save(model.state_dict(), "dlaanet.pth")
+    torch.save(model.state_dict(), "DLAANet.pth")
     print("Excellent! 'dlaanet.pth' has been successfully created and saved.")
 
 
