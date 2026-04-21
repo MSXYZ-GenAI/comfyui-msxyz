@@ -89,7 +89,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "taa_strength": ("FLOAT", {"default": 0.40, "min": 0, "max": 1, "step": 0.05}),
+                "taa_strength": ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}),
                 "taa_alpha": ("FLOAT", {"default": 0.20, "min": 0, "max": 0.9, "step": 0.01}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0, "max": 0.3, "step": 0.01}),
                 "jitter_scale": ("FLOAT", {"default": 0.1, "min": 0, "max": 1, "step": 0.01}),
@@ -112,11 +112,13 @@ class VideoTAADLAA:
             base_path = os.path.dirname(os.path.realpath(__file__))
             path = os.path.join(base_path, "DLAANet.pth")
             
-            try:
-                state_dict = torch.load(path, map_location=device, weights_only=True)
-                net.load_state_dict(state_dict)
-            except Exception:
-                pass # if an error, do nothing; let the program continue with random/dirac weights
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"[DLAA] Model file not found: {path}")
+
+            state_dict = torch.load(path, map_location=device, weights_only=True)
+            net.load_state_dict(state_dict)
+
+            print(f"\033[92m[DLAA] Model loaded successfully: {path}\033[0m")
             
             net.eval()
             self.net_cache[key] = net
@@ -137,7 +139,7 @@ class VideoTAADLAA:
     def edge_aa(self, x, thr, blur, net):
         if blur <= 0: return x
         
-        gray = 0.299*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
+        gray = 0.2126*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
@@ -176,22 +178,22 @@ class VideoTAADLAA:
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb = torch.lerp(rgb, taa_out, taa_strength)
                 
+                
                 if dlaa_strength > 0:
-                    luma_orig = 0.2126*rgb[:,0:1] + 0.7152*rgb[:,1:2] + 0.0722*rgb[:,2:3]
 
                     refined_output = torch.clamp(net(rgb), 0.0, 1.0)
                     diff_check = torch.mean((refined_output - rgb) ** 2).item()
                     if i == 0: 
                         print(f"\033[92m[DLAA] Model Delta (MSE): \033[93m{diff_check:.6f}\033[0m")
-                    residual = refined_output - rgb
-
-                    luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
+                        
+                    # residual = refined_output - rgb
+                    # luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
+                    # rgb = rgb + (luma_res * dlaa_strength * 2.5)
+                    # rgb = rgb * (1.0 + dlaa_strength * 0.4)
+                    # rgb = torch.clamp(rgb, 0.0, 1.0)
+                    # rgb = torch.pow(rgb, 0.98)
                     
-                    rgb = rgb + (luma_res * dlaa_strength * 1.5)
-                    rgb = rgb * (1.0 + dlaa_strength * 0.4)
-                    
-                    rgb = torch.clamp(rgb, 0.0, 1.0)
-                    rgb = torch.pow(rgb, 0.98)
+                    rgb = torch.lerp(rgb, refined_output, dlaa_strength)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 out_list.append(rgb.permute(0,2,3,1).cpu())
