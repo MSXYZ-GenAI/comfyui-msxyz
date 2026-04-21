@@ -110,7 +110,7 @@ class VideoTAADLAA:
             net = _DLAANet().to(device)
             
             base_path = os.path.dirname(os.path.realpath(__file__))
-            path = os.path.join(base_path, "dlaanet.pth")
+            path = os.path.join(base_path, "DLAANet.pth")
             
             try:
                 state_dict = torch.load(path, map_location=device, weights_only=True)
