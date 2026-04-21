@@ -12,7 +12,7 @@ try:
 except:
     mm = None
 
-logger = logging.getLogger("video_taadlaa")
+logger = logging.getLogger("VideoTAADLAA")
 
 
 class _DLAANet(nn.Module):
@@ -79,7 +79,7 @@ class _TAAState:
         self.history = out.detach()
         return out
 
-class video_taadlaa:
+class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
         self.taa = _TAAState()
