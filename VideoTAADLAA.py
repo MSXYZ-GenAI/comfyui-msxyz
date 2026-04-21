@@ -1,5 +1,5 @@
 # Created by MSXYZ (AI-assisted)
-# Temporal Anti-Aliasing (TAA) + Lightweight DLAA-style Sharpening
+# Temporal (TAA) + Lightweight DLAA-style Anti-Aliasing
 # v0.1.1 - Active Weights, MSE Monitoring & Pixel Integrity
 
 import torch
@@ -187,7 +187,9 @@ class VideoTAADLAA:
 
                     luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
                     
-                    rgb = rgb + (luma_res * dlaa_strength * 1.5)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.5),
+                    0
+                    +65
                     rgb = rgb * (1.0 + dlaa_strength * 0.4)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
