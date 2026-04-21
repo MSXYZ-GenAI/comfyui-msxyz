@@ -3,7 +3,6 @@
 import torch
 import torch.nn.functional as F
 
-
 class VideoAdaptiveAA:
     def __init__(self):
         pass
@@ -18,7 +17,6 @@ class VideoAdaptiveAA:
                 "blur_radius": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1}),
             },
         }
-
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "apply_aa"
@@ -40,7 +38,6 @@ class VideoAdaptiveAA:
             + 0.1 * img_rgb[:, 2:3, :, :]
         )
         
-        # Kenarları belirle
         get_sobel_x = torch.tensor(
             [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
         ).view(1, 1, 3, 3).to(img.device)
