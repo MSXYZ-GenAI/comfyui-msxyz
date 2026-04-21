@@ -1,10 +1,10 @@
 # Created by MSXYZ
 
-### How to train your DLAA model?
+# How to train your DLAA model?
 # I have included the `train_dlaa.py` script for those who want to fine-tune the model. 
 # 1. Create a folder named `dataset` next to the script.
 # 2. Put 50-100 high-quality images (landscapes, portraits, geometric images) inside it.
-# 3. Open the terminal in hte folder Run "python train_dlaa.py" and wait for 100 epochs.
+# 3. Open the terminal in hte folder Run "python train_dlaa.py" and wait for 100 or 500 epochs.
 
 import torch
 import torch.nn as nn
@@ -24,9 +24,19 @@ class _DLAANet(nn.Module):
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
 
-        self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
-        self.refiner = nn.Conv2d(16, 16, 3, padding=1, bias=False)
-        self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
+        self.block = nn.Sequential(
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.GroupNorm(4, 16),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(16, 16, 3, padding=1),
+            nn.GroupNorm(4, 16),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(16, 16, 3, padding=1)
+        )
+        
+        self.extract = nn.Conv2d(3, 16, 3, padding=1)
         
         self._init_weights()
 
@@ -36,9 +46,8 @@ class _DLAANet(nn.Module):
         nn.init.dirac_(self.reconstructor.weight) 
 
     def forward(self, x):
-        features = F.leaky_relu(self.extract_feature(x), 0.2)
-        refined = F.leaky_relu(self.refiner(features), 0.2)
-        residual = self.reconstructor(refined)
+        features = F.leaky_relu(self.extract(x), 0.2)
+        residual = self.block(features)
         return x + residual
 
 # Dataset
@@ -52,7 +61,6 @@ class DLAADataset(Dataset):
             transforms.ToTensor()
         ])
         
-        # Kötü görsel için transform
         self.input_transform = transforms.Compose([
             transforms.Resize((128, 128), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.NEAREST),
@@ -80,7 +88,7 @@ def train():
     dataset = DLAADataset("dataset")
     dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
 
-    # Optimizasyon
+    # Optimization
     criterion = nn.L1Loss() 
     optimizer = optim.Adam(model.parameters(), lr=4e-3)
 
@@ -104,7 +112,7 @@ def train():
 
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss/len(dataloader):.4f}")
 
-    # Kaydet
+    # Save
     torch.save(model.state_dict(), "dlaanet.pth")
     print("Excellent! 'dlaanet.pth' has been successfully created and saved.")
 
