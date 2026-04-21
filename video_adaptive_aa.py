@@ -78,7 +78,7 @@ class video_adaptive_aa:
 
 
 NODE_CLASS_MAPPINGS = {
-    "VideoAdaptiveAA": video_adaptive_aa
+    "VideoAdaptiveAA": VideoAdaptiveAA
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
