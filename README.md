@@ -34,7 +34,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ---
 
-### 🧠 Model Performance
+### Performance
 * **Final Loss:** 0.0265 (4x Aliasing Stress-Test)
 * **Inference MSE:** ~0.00015 (Surgical Precision)
 * **Effect:** Eliminates jagged edges and pixel crawling while preserving 99.9% of the original texture.
