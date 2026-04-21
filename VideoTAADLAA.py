@@ -18,26 +18,36 @@ logger = logging.getLogger("VideoTAADLAA")
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
-        
         self.register_buffer("sobel_x", torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
 
         self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
-        
-        self.refiner = nn.Conv2d(16, 16, 3, padding=1, bias=False)
+        self.refiner = nn.Sequential(
+            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 16),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 16),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+        )
         self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
-        
         self._init_weights()
 
     def _init_weights(self):
         nn.init.orthogonal_(self.extract_feature.weight)
-        nn.init.orthogonal_(self.refiner.weight)
-        nn.init.dirac_(self.reconstructor.weight) 
+        for m in self.refiner.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, nonlinearity='leaky_relu')
+            elif isinstance(m, nn.GroupNorm):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+        nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
         features = F.leaky_relu(self.extract_feature(x), 0.2)
-        refined = F.leaky_relu(self.refiner(features), 0.2)
+        refined = self.refiner(features)
         residual = self.reconstructor(refined)
         return x + residual
 
@@ -177,7 +187,7 @@ class VideoTAADLAA:
 
                     luma_res = 0.2126*residual[:,0:1] + 0.7152*residual[:,1:2] + 0.0722*residual[:,2:3]
                     
-                    rgb = rgb + (luma_res * dlaa_strength * 1.4)
+                    rgb = rgb + (luma_res * dlaa_strength * 1.5)
                     rgb = rgb * (1.0 + dlaa_strength * 0.4)
                     
                     rgb = torch.clamp(rgb, 0.0, 1.0)
