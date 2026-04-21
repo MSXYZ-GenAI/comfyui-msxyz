@@ -1,5 +1,7 @@
-### How to train your DLAA model?
+# Created by MSXYZ
 
+### How to train your DLAA model?
+# I have included the `train_dlaa.py` script for those who want to fine-tune the model. 
 # 1. Create a folder named `dataset` next to the script.
 # 2. Put 50-100 high-quality images (landscapes, portraits, geometric images) inside it.
 # 3. Open the terminal in hte folder Run "python train_dlaa.py" and wait for 100 epochs.
