@@ -1,10 +1,15 @@
 # Created by MSXYZ
 
-# How to train your DLAA model?
-# I have included the `train_dlaa.py` script for those who want to fine-tune the model. 
-# 1. Create a folder named `dataset` next to the script.
-# 2. Put 50-100 high-quality images (landscapes, portraits, geometric images) inside it.
-# 3. Open the terminal in hte folder Run "python train_dlaa.py" and wait for 100 or 500 epochs.
+# Training DLAA model
+# This repository includes a simple training script (train_dlaa.py) for fine-tuning the model.
+
+# Steps:
+# 1. Create a folder named `dataset` next to this script.
+# 2. Add around 50–100 high-quality images (landscapes, portraits, or simple geometric patterns).
+# 3. Open a terminal in this directory and run:
+#    python train_dlaa.py
+
+# Training will run for a fixed number of epochs (typically 100–500 depending on your dataset and GPU).
 
 import torch
 import torch.nn as nn
@@ -70,15 +75,7 @@ class DLAADataset(Dataset):
         ])
 
         self.input_transform = transforms.Compose([
-            transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.NEAREST),
-
-            transforms.RandomApply([
-                transforms.GaussianBlur(3, sigma=(0.1, 1.5))
-            ], p=0.5),
-
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-
+            transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ToTensor()
         ])
 
@@ -106,7 +103,7 @@ def train():
     criterion = nn.L1Loss() 
     optimizer = optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999))
 
-    epochs = 100
+    epochs = 200
 
     for epoch in range(epochs):
         model.train()
