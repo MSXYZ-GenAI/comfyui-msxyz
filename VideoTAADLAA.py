@@ -79,6 +79,7 @@ class _TAAState:
         self.history = out.detach()
         return out
 
+
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
