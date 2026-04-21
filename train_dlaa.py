@@ -6,8 +6,7 @@
 # Steps:
 # 1. Create a folder named "dataset" next to this script.
 # 2. Add around 50–100 high-quality images (landscapes, portraits, or simple geometric patterns).
-# 3. Open a terminal in this directory and run:
-#    python train_dlaa.py
+# 3. Open a terminal in this directory and run: python train_dlaa.py
 
 # Training will run for a fixed number of epochs (typically 100–500 depending on your dataset and GPU).
 
