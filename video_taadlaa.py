@@ -12,7 +12,7 @@ try:
 except:
     mm = None
 
-logger = logging.getLogger("VideoTAADLAA")
+logger = logging.getLogger("video_taadlaa")
 
 
 class _DLAANet(nn.Module):
@@ -22,17 +22,17 @@ class _DLAANet(nn.Module):
         self.register_buffer("sobel_y", torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32).view(1, 1, 3, 3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25, 0.25], [-0.25, -0.25], [-0.25, 0.25], [0.25, -0.25]], dtype=torch.float32))
 
-        self.extract_feature = nn.Conv2d(3, 16, 3, padding=1, bias=False)
+        self.extract_feature = nn.Conv2d(3, 32, 3, padding=1, bias=False)
         self.refiner = nn.Sequential(
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 16),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 32),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 16),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 32),
             nn.LeakyReLU(0.2),
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),
+            nn.Conv2d(32, 32, 3, padding=1, bias=False),
         )
-        self.reconstructor = nn.Conv2d(16, 3, 3, padding=1, bias=False)
+        self.reconstructor = nn.Conv2d(32, 3, 3, padding=1, bias=False)
         self._init_weights()
 
     def _init_weights(self):
@@ -69,7 +69,7 @@ class _TAAState:
         # Neighborhood clamping
         local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
         local_max = F.max_pool2d(frame, kernel_size=3, stride=1, padding=1)
-        history_clipped = torch.clamp(self.history, local_min, local_max)
+        history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         motion_mask = torch.sigmoid((diff - sensitivity) * 45.0)
@@ -79,7 +79,7 @@ class _TAAState:
         self.history = out.detach()
         return out
 
-class VideoTAADLAA:
+class video_taadlaa:
     def __init__(self):
         self.net_cache = {}
         self.taa = _TAAState()
@@ -139,7 +139,7 @@ class VideoTAADLAA:
     def edge_aa(self, x, thr, blur, net):
         if blur <= 0: return x
         
-        gray = 0.2126*x[:, 0:1] + 0.587*x[:, 1:2] + 0.114*x[:, 2:3]
+        gray = 0.2126*x[:,0:1] + 0.7152*x[:,1:2] + 0.0722*x[:,2:3]
         sx, sy = F.conv2d(gray, net.sobel_x, padding=1), F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
         
@@ -198,10 +198,10 @@ class VideoTAADLAA:
 
                 out_list.append(rgb.permute(0,2,3,1).cpu())
 
-                if i % 10 == 0:
+                if i % 10 == 0 and mm is not None:
                     mm.soft_empty_cache()
 
         return (torch.cat(out_list, dim=0),)
 
-NODE_CLASS_MAPPINGS = {"VideoTAADLAA": VideoTAADLAA}
-NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing"}
+NODE_CLASS_MAPPINGS = {"video_taadlaa": video_taadlaa}
+NODE_DISPLAY_NAME_MAPPINGS = {"video_taadlaa": "🎮 Video TAA + DLAA Anti-Aliasing"}

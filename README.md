@@ -20,7 +20,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 | TAA + DLAA Anti-Aliasing | Adaptive Anti-Aliasing |
 | :---: | :---: |
-| ![Video TAA + DLAA Node](https://raw.githubusercontent.com/MSXYZ-GenAI/comfyui-msxyz/refs/heads/main/VideoTAADLAA_settings.png) | ![Video Adaptive AA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/VideoAdaptiveAA_settings.png) |
+| ![Video TAA + DLAA Node](https://raw.githubusercontent.com/MSXYZ-GenAI/comfyui-msxyz/refs/heads/main/video_taadlaa.png) | ![Video Adaptive AA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/video_adaptive_aa.png) |
 
 ---
 
@@ -47,8 +47,8 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
     <td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td><img src="Compare_1.png" width="450"></td>
-    <td><img src="Compare_2.png" width="450"></td>
+    <td><img src="compare_1.png" width="450"></td>
+    <td><img src="compare_2.png" width="450"></td>
   </tr>
 </table>
 

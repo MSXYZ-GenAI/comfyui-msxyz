@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 
-class VideoAdaptiveAA:
+class video_adaptive_aa:
     def __init__(self):
         pass
 
@@ -78,9 +78,9 @@ class VideoAdaptiveAA:
 
 
 NODE_CLASS_MAPPINGS = {
-    "VideoAdaptiveAA": VideoAdaptiveAA
+    "video_adaptive_aa": video_adaptive_aa
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "VideoAdaptiveAA": "✨ Video Adaptive Anti-Aliasing"
+    "video_adaptive_aa": "✨ Video Adaptive Anti-Aliasing"
 }
