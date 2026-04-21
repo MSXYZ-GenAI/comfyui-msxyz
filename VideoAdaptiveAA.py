@@ -19,6 +19,7 @@ class VideoAdaptiveAA:
             },
         }
 
+
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "apply_aa"
     CATEGORY = "CustomPostProcess"
