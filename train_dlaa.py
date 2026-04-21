@@ -22,7 +22,7 @@ import os
 import glob
 
 
-# Do not change this architecture (must be the same as in VideoTAADLAA.py)
+# Do not change this architecture
 class _DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -76,7 +76,8 @@ class DLAADataset(Dataset):
 
         self.input_transform = transforms.Compose([
             transforms.Resize((128, 128), interpolation=transforms.InterpolationMode.BICUBIC), 
-            # Tırtık oluşturma aşaması
+            
+            # Downsampling
             transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.NEAREST),
             transforms.ToTensor()
         ])
