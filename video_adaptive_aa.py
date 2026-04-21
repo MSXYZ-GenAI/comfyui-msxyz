@@ -78,9 +78,9 @@ class video_adaptive_aa:
 
 
 NODE_CLASS_MAPPINGS = {
-    "video_adaptive_aa": video_adaptive_aa
+    "VideoAdaptiveAA": video_adaptive_aa
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "video_adaptive_aa": "✨ Video Adaptive Anti-Aliasing"
+    "VideoAdaptiveAA": "✨ Video Adaptive Anti-Aliasing"
 }
