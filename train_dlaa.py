@@ -69,15 +69,19 @@ class DLAADataset(Dataset):
     def __init__(self, image_dir):
         self.image_paths = glob.glob(os.path.join(image_dir, '*.*'))
 
-        self.target_transform = transforms.Compose([
-            transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.ToTensor()
-        ])
+            self.target_transform = transforms.Compose([
+                transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor()
+            ])
 
-        self.input_transform = transforms.Compose([
-            transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.ToTensor()
-        ])
+            self.input_transform = transforms.Compose([
+                transforms.Resize((128, 128), interpolation=transforms.InterpolationMode.BICUBIC), 
+                
+                # Downsampling
+                transforms.Resize((512, 512), interpolation=transforms.InterpolationMode.NEAREST),
+                
+                transforms.ToTensor()
+            ])
 
     def __len__(self):
         return len(self.image_paths)
