@@ -369,7 +369,7 @@ def train(
 if __name__ == "__main__":
     try:
         print("=" * 62)
-        print("         DLAA Model Training  v0.1.1")
+        print("         Model Training  v0.1.1")
         print("=" * 62)
 
         dataset_dir = "dataset"
