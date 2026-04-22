@@ -52,7 +52,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 <p align="center">
   <strong>TAA + DLAA Comparison</strong>
-  <video src="https://github.com/user-attachments/assets/ec5d576e-f328-430d-8051-fc65800af4e1" width="500" controls autoplay muted loop>
+  <video src="https://github.com/user-attachments/assets/4109726e-c5db-404b-9c0d-23d49b9641cf" width="500" controls autoplay muted loop>
   </video>
 </p>
 
