@@ -280,9 +280,9 @@ def train(
     w_pixel        = 1.0,
     w_edge         = 0.5,
     w_freq         = 0.1,
-    w_luma         = 0.5,
+    w_luma         = 0.8,
     w_smooth       = 0.3,
-    w_perceptual   = 0.2,
+    w_perceptual   = 0.05,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[DLAA] Device       : {device}")
@@ -364,38 +364,48 @@ def train(
 
 
 if __name__ == "__main__":
-    print("=" * 62)
-    print("         DLAA Model Training  v0.4.0")
-    print("=" * 62)
+    try:
+        print("=" * 62)
+        print("         DLAA Model Training  v0.1.1")
+        print("=" * 62)
 
-    dataset_dir = "dataset"
-    if not os.path.isdir(dataset_dir):
-        print(f"[ERROR] '{dataset_dir}' folder not found.")
-        print("Create a 'dataset' folder and add images, then re-run.")
-        exit(1)
+        dataset_dir = "dataset"
+        if not os.path.isdir(dataset_dir):
+            print(f"[ERROR] '{dataset_dir}' folder not found.")
+            input("Press Enter to exit...")
+            exit(1)
 
-    n_imgs = len([
-        f for f in glob.glob(os.path.join(dataset_dir, "*.*"))
-        if os.path.splitext(f)[1].lower() in DLAADataset.SUPPORTED
-    ])
-    print(f"[INFO] Checking the dataset...")
-    if n_imgs < 20:
-        print(f"[WARN] Only {n_imgs} images found. 50+ recommended.")
-    else:
-        print(f"[INFO] {n_imgs} images found. Starting training...")
+        n_imgs = len([
+            f for f in glob.glob(os.path.join(dataset_dir, "*.*"))
+            if os.path.splitext(f)[1].lower() in DLAADataset.SUPPORTED
+        ])
 
-    train(
-        dataset_dir  = "dataset",
-        output_path  = "DLAANet.pth",
-        image_size   = 512,
-        batch_size   = 4,       # VRAM'a göre artır: 8, 16...
-        epochs       = 100,
-        lr           = 3e-4,
-        patience     = 12,
-        w_pixel      = 1.0,
-        w_edge       = 0.5,
-        w_freq       = 0.1,
-        w_luma       = 0.5,
-        w_smooth     = 0.3,
-        w_perceptual = 0.2,
-    )
+        print(f"[INFO] Checking the dataset...")
+        if n_imgs < 20:
+            print(f"[WARN] Only {n_imgs} images found. 100+ recommended.")
+        else:
+            print(f"[INFO] {n_imgs} images found. Starting training...")
+
+        train(
+            dataset_dir  = "dataset",
+            output_path  = "DLAANet.pth",
+            image_size   = 512,
+            batch_size   = 4,
+            epochs       = 100,
+            lr           = 3e-4,
+            patience     = 12,
+            w_pixel      = 1.0,
+            w_edge       = 0.5,
+            w_freq       = 0.1,
+            w_luma       = 0.8,
+            w_smooth     = 0.3,
+            w_perceptual = 0.05,
+        )
+
+        print("\nTraining finished successfully.")
+        input("Press Enter to exit...")
+
+    except Exception as e:
+        print("\n[CRASH]")
+        print(e)
+        input("Press Enter to exit...")
