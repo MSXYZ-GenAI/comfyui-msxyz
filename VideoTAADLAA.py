@@ -256,7 +256,7 @@ class VideoTAADLAA:
         B, H, W, C = images.shape
         out_list   = []
 
-        # Auto tile size VRAM
+        # Auto tile size for VRAM
         if mm is not None:
             try:
                 vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
@@ -294,36 +294,32 @@ class VideoTAADLAA:
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
-                # DLAA neural pass
+                # DLAA Smart Neural Pass
                 if dlaa_strength > 0:
                     try:
                         refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
+                        
+                        # Smart Luma
+                        avg_luma = torch.mean(refined)
+                        luma_boost = (0.45 / (avg_luma + 1e-6)).clamp(1.0, 1.25)
+                        refined = refined * luma_boost
+                        
+                        # Smart Clarity
+                        low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
+                        details = refined - low_freq
+                        detail_std = torch.std(details)
+                        
+                        auto_clarity_gain = (0.05 / (detail_std + 1e-6)).clamp(0.0, 0.6)
+                        refined = refined + (details * auto_clarity_gain)
+
                     except RuntimeError as e:
                         if "out of memory" in str(e).lower():
-                            print("\033[91m[DLAA] OOM detected, retrying with smaller tiles...\033[0m")
                             tile_try = tile_size // 2
-
-                            for _ in range(3):
-                                try:
-                                    refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
-                                    break
-                                except RuntimeError as e:
-                                    if "out of memory" in str(e).lower():
-                                        print(f"\033[91m[DLAA] OOM → retry with {tile_try//2}px\033[0m")
-                                        if torch.cuda.is_available():
-                                            torch.cuda.empty_cache()
-                                        tile_try = max(256, tile_try // 2)
-                                    else:
-                                        raise e
-                            else:
-                                raise RuntimeError("DLAA failed even after retries")
+                            refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
                         else:
                             raise e
 
-                    mse = torch.mean((refined - rgb) ** 2).item()
-                    if i == 0:
-                        print(f"\033[92m[DLAA] MSE delta: \033[93m{mse:.6f}\033[0m")
-
+                    # Orijinal görüntü ile DLAA sonucunu harmanla
                     rgb = torch.lerp(rgb, refined, dlaa_strength)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
