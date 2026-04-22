@@ -39,19 +39,20 @@ class VideoAdaptiveAA:
         )
         
         get_sobel_x = torch.tensor(
-            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32
-        ).view(1, 1, 3, 3).to(img.device)
+            [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=img.dtype, device=img.device
+        ).view(1, 1, 3, 3)
 
         get_sobel_y = torch.tensor(
-            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32
-        ).view(1, 1, 3, 3).to(img.device)
+            [[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=img.dtype, device=img.device
+        ).view(1, 1, 3, 3)
 
         edges_x = F.conv2d(img_gray, get_sobel_x, padding=1)
         edges_y = F.conv2d(img_gray, get_sobel_y, padding=1)
 
         edges = torch.sqrt(edges_x**2 + edges_y**2 + 1e-6)
 
-        mask = (edges > edge_threshold).float()
+        fade_width = 0.1
+        mask = torch.clamp((edges - edge_threshold) / fade_width, 0.0, 1.0)
         mask = torch.clamp(mask * strength, 0.0, 1.0)
 
         kernel_size = blur_radius * 2 + 1
