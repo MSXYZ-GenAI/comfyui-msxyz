@@ -276,13 +276,12 @@ def train(
     epochs         = 100,
     lr             = 3e-4,
     patience       = 12,
-    # loss weights
     w_pixel        = 1.0,
     w_edge         = 0.5,
     w_freq         = 0.1,
     w_luma         = 0.8,
     w_smooth       = 0.3,
-    w_perceptual   = 0.05,
+    w_perceptual   = 0.1,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[DLAA] Device       : {device}")
@@ -339,7 +338,7 @@ def train(
         lr_now = scheduler.get_last_lr()[0]
         marker = " ★" if avg < best_loss else ""
 
-        # Detailed loss breakdown every 5 epochs
+        # Detailed loss every 5 epochs
         if (epoch + 1) % 5 == 0 or epoch == 0:
             breakdown = "  |  " + "  ".join(
                 f"{k}:{sub_totals[k]/n:.4f}" for k in sub_totals
@@ -399,7 +398,7 @@ if __name__ == "__main__":
             w_freq       = 0.1,
             w_luma       = 0.8,
             w_smooth     = 0.3,
-            w_perceptual = 0.05,
+            w_perceptual = 0.1,
         )
 
         print("\nTraining finished successfully.")
