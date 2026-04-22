@@ -15,7 +15,7 @@ class VideoAdaptiveAA:
                 "images": ("IMAGE",),
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1}),
                 "edge_threshold": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "blur_radius": ("INT", {"default": 1, "min": 1, "max": 5, "step": 1}),
+                "blur_radius": ("INT", {"default": 1, "min": 1, "max": 3, "step": 1}),
             },
         }
 
