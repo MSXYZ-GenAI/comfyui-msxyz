@@ -127,10 +127,10 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images"            : ("IMAGE",),
-                "taa_strength"      : ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}),
-                "dlaa_strength"     : ("FLOAT", {"default": 0.60, "min": 0, "max": 1.5, "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT", {"default": 0.20, "min": 0, "max": 2, "step": 0.05}),
-                "motion_sensitivity": ("FLOAT", {"default": 0.10, "min": 0, "max": 0.3, "step": 0.01}),
+                "taa_strength"      : ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
+                "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
+                "sharpen_strength"  : ("FLOAT", {"default": 0.15, "min": 0, "max": 2, "step": 0.05}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
             }
         }
 
