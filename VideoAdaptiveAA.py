@@ -1,4 +1,5 @@
 # Created by MSXYZ (AI-assisted)
+# Fix: Device/dtype synchronization
 
 import torch
 import torch.nn.functional as F
