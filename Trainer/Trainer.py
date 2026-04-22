@@ -277,7 +277,7 @@ def train(
     lr             = 3e-4,
     patience       = 12,
     w_pixel        = 1.0,
-    w_edge         = 0.5,
+    w_edge         = 0.8,
     w_freq         = 0.1,
     w_luma         = 0.8,
     w_smooth       = 0.3,
@@ -351,6 +351,10 @@ def train(
         if avg < best_loss:
             best_loss  = avg
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            
+            # Writes the file to disk from each new record
+            torch.save(best_state, output_path) 
+            print(f" [SYSTEM] Updated to the best model disk: {output_path} (Loss: {avg:.5f})")
 
         if stopper.step(avg):
             print(f"\n[DLAA] Early stop at epoch {epoch+1} (no improvement for {patience} epochs)")
@@ -394,7 +398,7 @@ if __name__ == "__main__":
             lr           = 3e-4,
             patience     = 12,
             w_pixel      = 1.0,
-            w_edge       = 0.5,
+            w_edge       = 0.8,
             w_freq       = 0.1,
             w_luma       = 0.8,
             w_smooth     = 0.3,
