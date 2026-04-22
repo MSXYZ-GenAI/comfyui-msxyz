@@ -132,10 +132,10 @@ class VideoTAADLAA:
                 "motion_sensitivity": ("FLOAT",   {"default": 0.08, "min": 0,    "max": 0.3,  "step": 0.01}),
                 "jitter_scale"      : ("FLOAT",   {"default": 0.20, "min": 0,    "max": 1,    "step": 0.01}),
                 "dlaa_strength"     : ("FLOAT",   {"default": 0.60, "min": 0,    "max": 1,    "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT",   {"default": 0.30, "min": 0,    "max": 2,    "step": 0.05}),
+                "sharpen_strength"  : ("FLOAT",   {"default": 0.35, "min": 0,    "max": 2,    "step": 0.05}),
                 "edge_threshold"    : ("FLOAT",   {"default": 0.20, "min": 0.05, "max": 0.5,  "step": 0.01}),
                 "blur_radius"       : ("INT",     {"default": 1,    "min": 0,    "max": 3,    "step": 1}),
-                "reset_history"     : ("BOOLEAN", {"default": True}),
+                "reset_history"     : ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -244,7 +244,7 @@ class VideoTAADLAA:
 
     def execute(self, images, taa_strength, taa_alpha, motion_sensitivity,
                 jitter_scale, dlaa_strength, sharpen_strength,
-                edge_threshold, blur_radius, reset_history=True):
+                edge_threshold, blur_radius, reset_history=False):
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
