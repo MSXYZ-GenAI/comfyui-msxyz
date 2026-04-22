@@ -72,10 +72,14 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 > - Test the effect by increasing `dlaa_strength` to **0.8** or **1.0**.  
 
 **Parameters**
-- **taa_strength:** Controls the influence of previous frames to reduce flickering. (Default: 0.5 | Fast Motion: 0.4 | Static: 0.9)
-- **dlaa_strength:** Power of the Smart DLAA neural reconstruction model. (Default: 0.6 | Subtle: 0.4 | Aggressive: 1.0)
-- **sharpen_strength:** Final crispness adjustment to enhance edge and texture definition. (Default: 0.2 | Off: 0.0 | Maximum: 2.0)
-- **motion_sensitivity:** Threshold to disable temporal smoothing in moving areas. (Default: 0.1 | Flicker-free: 0.08 | High-speed: 0.3)
+- **taa_strength:** Controls the influence of previous frames to reduce flickering.
+- (Default: 0.5 | Fast Motion: 0.4 | Static: 0.9)
+- **dlaa_strength:** Power of the Smart DLAA neural reconstruction model.
+- (Default: 0.6 | Subtle: 0.4 | Aggressive: 1.0)
+- **sharpen_strength:** Final crispness adjustment to enhance edge and texture definition.
+- (Default: 0.2 | Off: 0.0 | Maximum: 2.0)
+- **motion_sensitivity:** Threshold to disable temporal smoothing in moving areas.
+- (Default: 0.1 | Flicker-free: 0.08 | High-speed: 0.3)
 
 ---
 
