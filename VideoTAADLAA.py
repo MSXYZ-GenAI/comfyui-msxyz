@@ -101,7 +101,7 @@ class TAAState:
         history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
         diff          = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        motion_mask   = torch.sigmoid((diff - sensitivity) * 45.0)
+        motion_mask   = torch.sigmoid((diff - sensitivity) * 15.0)
         dynamic_alpha = alpha * (1.0 - motion_mask)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
@@ -154,7 +154,7 @@ class VideoTAADLAA:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"[DLAA] Model file not found: {path}")
 
-            state_dict = torch.load(path, map_location=device, weights_only=True)
+            state_dict = torch.load(path, map_location=device)
             net.load_state_dict(state_dict)
             net.eval()
 
@@ -251,8 +251,6 @@ class VideoTAADLAA:
 
         if reset_history:
             self.taa.reset()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
         net        = self._net(device)
         B, H, W, C = images.shape
@@ -279,7 +277,7 @@ class VideoTAADLAA:
         else:
             print(f"\033[92m[DLAA] Single-pass mode: {H}x{W}\033[0m")
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for i in range(B):
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
@@ -298,7 +296,29 @@ class VideoTAADLAA:
 
                 # DLAA neural pass
                 if dlaa_strength > 0:
-                    refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
+                    try:
+                        refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
+                    except RuntimeError as e:
+                        if "out of memory" in str(e).lower():
+                            print("\033[91m[DLAA] OOM detected, retrying with smaller tiles...\033[0m")
+                            tile_try = tile_size // 2
+
+                            for _ in range(3):
+                                try:
+                                    refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
+                                    break
+                                except RuntimeError as e:
+                                    if "out of memory" in str(e).lower():
+                                        print(f"\033[91m[DLAA] OOM → retry with {tile_try//2}px\033[0m")
+                                        if torch.cuda.is_available():
+                                            torch.cuda.empty_cache()
+                                        tile_try = max(256, tile_try // 2)
+                                    else:
+                                        raise e
+                            else:
+                                raise RuntimeError("DLAA failed even after retries")
+                        else:
+                            raise e
 
                     mse = torch.mean((refined - rgb) ** 2).item()
                     if i == 0:
@@ -313,7 +333,7 @@ class VideoTAADLAA:
 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
 
-                if i % 10 == 0 and mm is not None:
+                if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
 
         return (torch.cat(out_list, dim=0),)
