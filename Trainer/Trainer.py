@@ -397,12 +397,12 @@ if __name__ == "__main__":
             epochs         = 150,
             lr             = 3e-4,
             patience       = 20,
-            w_pixel        = 1.0,
-            w_edge         = 0.8,
-            w_freq         = 0.1,
-            w_luma         = 0.8,
-            w_smooth       = 0.3,
-            w_perceptual   = 0.1,
+            w_pixel        = 0.5,
+            w_edge         = 1.0,
+            w_freq         = 0.5,
+            w_luma         = 1.0,
+            w_smooth       = 0.1,
+            w_perceptual   = 0.5,
         )
 
         print("\nTraining finished successfully.")
