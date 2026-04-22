@@ -90,7 +90,7 @@ class DLAANet(nn.Module):
 class _PerceptualLoss(nn.Module):
     def __init__(self, device):
         super().__init__()
-        vgg  = vgg16(weights=VGG16_Weights.DEFAULT).features[:16].to(device).eval()
+        vgg = vgg16(weights=VGG16_Weights.DEFAULT).features[:23].to(device).eval()
         for p in vgg.parameters():
             p.requires_grad = False
         self.vgg = vgg
@@ -239,7 +239,7 @@ class DLAADataset(Dataset):
 
         clean  = self.clean_tf(img)
         mode   = random.randint(0, 4)
-        factor = random.uniform(0.25, 0.6)
+        factor = random.uniform(0.15, 0.45)
 
         if   mode == 0: aliased = self._alias_nearest(clean, factor)
         elif mode == 1: aliased = self._alias_bilinear_blur(clean, factor)
@@ -394,15 +394,15 @@ if __name__ == "__main__":
             output_path  = "DLAANet.pth",
             image_size   = 512,
             batch_size   = 4,
-            epochs       = 100,
-            lr           = 3e-4,
-            patience     = 12,
-            w_pixel      = 1.0,
-            w_edge       = 0.8,
-            w_freq       = 0.1,
-            w_luma       = 0.8,
-            w_smooth     = 0.3,
-            w_perceptual = 0.1,
+            epochs         = 150,
+            lr             = 3e-4,
+            patience       = 20,
+            w_pixel        = 1.0,
+            w_edge         = 0.8,
+            w_freq         = 0.1,
+            w_luma         = 0.8,
+            w_smooth       = 0.3,
+            w_perceptual   = 0.1,
         )
 
         print("\nTraining finished successfully.")
