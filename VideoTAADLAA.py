@@ -128,12 +128,12 @@ class VideoTAADLAA:
             "required": {
                 "images"            : ("IMAGE",),
                 "taa_strength"      : ("FLOAT",   {"default": 0.60, "min": 0,    "max": 1,    "step": 0.05}),
-                "taa_alpha"         : ("FLOAT",   {"default": 0.15, "min": 0,    "max": 0.9,  "step": 0.01}),
+                "taa_alpha"         : ("FLOAT",   {"default": 0.10, "min": 0,    "max": 0.9,  "step": 0.01}),
                 "motion_sensitivity": ("FLOAT",   {"default": 0.08, "min": 0,    "max": 0.3,  "step": 0.01}),
                 "jitter_scale"      : ("FLOAT",   {"default": 0.20, "min": 0,    "max": 1,    "step": 0.01}),
-                "dlaa_strength"     : ("FLOAT",   {"default": 0.60, "min": 0,    "max": 1,    "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT",   {"default": 0.35, "min": 0,    "max": 2,    "step": 0.05}),
-                "edge_threshold"    : ("FLOAT",   {"default": 0.20, "min": 0.05, "max": 0.5,  "step": 0.01}),
+                "dlaa_strength"     : ("FLOAT",   {"default": 0.80, "min": 0,    "max": 1,    "step": 0.05}),
+                "sharpen_strength"  : ("FLOAT",   {"default": 0.30, "min": 0,    "max": 2,    "step": 0.05}),
+                "edge_threshold"    : ("FLOAT",   {"default": 0.15, "min": 0.05, "max": 0.5,  "step": 0.01}),
                 "blur_radius"       : ("INT",     {"default": 1,    "min": 0,    "max": 3,    "step": 1}),
                 "reset_history"     : ("BOOLEAN", {"default": False}),
             }
