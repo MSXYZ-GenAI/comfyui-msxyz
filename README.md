@@ -60,6 +60,9 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
   <img src="compare_3.png" width="650">
 </p>
 
+<video src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/compare_0.mp4?raw=true" controls="controls" style="max-width: 100%;">
+</video>
+
 ---
 
 ## 🚀 How to use
