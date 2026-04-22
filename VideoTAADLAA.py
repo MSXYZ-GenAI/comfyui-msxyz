@@ -1,6 +1,6 @@
 # Created by MSXYZ (AI-assisted)
 # Temporal (TAA) + DLAA Anti-Aliasing Inference
-# v0.1.1 - Auto Tile Size
+# v0.1.1 - Smart Neural Pass
 
 import torch
 import torch.nn as nn
@@ -127,15 +127,10 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images"            : ("IMAGE",),
-                "taa_strength"      : ("FLOAT",   {"default": 0.60, "min": 0,    "max": 1,    "step": 0.05}),
-                "taa_alpha"         : ("FLOAT",   {"default": 0.10, "min": 0,    "max": 0.9,  "step": 0.01}),
-                "motion_sensitivity": ("FLOAT",   {"default": 0.08, "min": 0,    "max": 0.3,  "step": 0.01}),
-                "jitter_scale"      : ("FLOAT",   {"default": 0.20, "min": 0,    "max": 1,    "step": 0.01}),
-                "dlaa_strength"     : ("FLOAT",   {"default": 0.80, "min": 0,    "max": 1.5,    "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT",   {"default": 0.30, "min": 0,    "max": 2,    "step": 0.05}),
-                "edge_threshold"    : ("FLOAT",   {"default": 0.15, "min": 0.05, "max": 0.5,  "step": 0.01}),
-                "blur_radius"       : ("INT",     {"default": 1,    "min": 0,    "max": 3,    "step": 1}),
-                "reset_history"     : ("BOOLEAN", {"default": False}),
+                "taa_strength"      : ("FLOAT", {"default": 0.50, "min": 0, "max": 1, "step": 0.05}),
+                "dlaa_strength"     : ("FLOAT", {"default": 0.60, "min": 0, "max": 1.5, "step": 0.05}),
+                "sharpen_strength"  : ("FLOAT", {"default": 0.20, "min": 0, "max": 2, "step": 0.05}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.10, "min": 0, "max": 0.3, "step": 0.01}),
             }
         }
 
@@ -166,11 +161,8 @@ class VideoTAADLAA:
         return self.net_cache[key]
 
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
-        """
-        Splits x into overlapping tiles, runs net on each tile,
-        blends with linear weight ramps to avoid seams.
-        VRAM usage stays constant regardless of input resolution.
-        """
+        
+        # Splits x into overlapping tiles to reduce VRAM usage
         B, C, H, W = x.shape
 
         # Small image
@@ -242,13 +234,27 @@ class VideoTAADLAA:
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         return x*(1.0 - mask) + blurred*mask
 
-    def execute(self, images, taa_strength, taa_alpha, motion_sensitivity,
-                jitter_scale, dlaa_strength, sharpen_strength,
-                edge_threshold, blur_radius, reset_history=False):
+    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, sharpen_strength):
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Fix
+        taa_alpha      = 0.10
+        jitter_scale   = 0.20
+        edge_threshold = 0.15
+        
+        # IMAGE or VIDEO
+        B, H, W, C = images.shape
+        is_single_image = (B == 1)
 
+        if is_single_image:
+            blur_radius   = 0
+            reset_history = True
+        else:
+            blur_radius   = 1
+            reset_history = False
+            
         if reset_history:
             self.taa.reset()
 
@@ -319,7 +325,7 @@ class VideoTAADLAA:
                         else:
                             raise e
 
-                    # Orijinal görüntü ile DLAA sonucunu harmanla
+                    # Combine the original image with the DLAA
                     rgb = torch.lerp(rgb, refined, dlaa_strength)
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
