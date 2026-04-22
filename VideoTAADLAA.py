@@ -317,13 +317,33 @@ class VideoTAADLAA:
                         
                         auto_clarity_gain = (0.05 / (detail_std + 1e-6)).clamp(0.0, 0.6)
                         refined = refined + (details * auto_clarity_gain)
-
-                    except RuntimeError as e:
-                        if "out of memory" in str(e).lower():
+                        
+                        #
+                    except RuntimeError as OOMRec:
+                        if "out of memory" in str(OOMRec).lower():
+                            print("\033[91m[DLAA] OOM detected, retrying with smaller tiles...\033[0m")
                             tile_try = tile_size // 2
-                            refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
+
+                            for _ in range(3):
+                                try:
+                                    refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
+                                    break
+                                except RuntimeError as OOMRec:
+                                    if "out of memory" in str(OOMRec).lower():
+                                        print(f"\033[91m[DLAA] OOM → retry with {tile_try//2}px\033[0m")
+                                        if torch.cuda.is_available():
+                                            torch.cuda.empty_cache()
+                                        tile_try = max(256, tile_try // 2)
+                                    else:
+                                        raise OOMRec
+                            else:
+                                raise RuntimeError("DLAA failed even after retries")
                         else:
-                            raise e
+                            raise OOMRec
+
+                    mse = torch.mean((refined - rgb) ** 2).item()
+                    if i == 0:
+                        print(f"\033[92m[DLAA] MSE delta: \033[93m{mse:.6f}\033[0m")
 
                     # Combine the original image with the DLAA
                     rgb = torch.lerp(rgb, refined, dlaa_strength)
