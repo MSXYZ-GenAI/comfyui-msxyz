@@ -72,14 +72,10 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 > - Test the effect by increasing `dlaa_strength` to **0.8** or **1.0**.  
 
 **Parameters**
-- **taa_strength:** Controls the impact of past frames. (Default: 0.6 | Fast Motion: 0.4 | Static: 0.9)
-- **taa_alpha:** Determines how quickly history updates. (Default: 0.1 | Aggressive AA: 0.05 | Ghost-free: 0.4)
-- **motion_sensitivity:** Threshold to disable TAA in moving areas. (Default: 0.08 | Flicker-free: 0.0 | High-speed: 0.2)
-- **jitter_scale:** Amount of sub-pixel shifting for reconstruction. (Default: 0.2 | Off: 0.0 | Maximum: 0.5)
-- **dlaa_strength:** Power of the neural reconstruction model. (Default: 0.8 | Subtle: 0.4 | Aggressive: 1.0)
-- **edge_threshold:** Sensitivity of edge detection. (Default: 0.15 | Hard edges: 0.3 | Fine details: 0.05)
-- **blur_radius:** Radius of pre-AA edge softening. (Default: 1 | Sharp: 0 | Softer: 2)
-- **reset_history:** Clears temporal memory. (Default: False | Enable on scene cuts: True)
+- **taa_strength:** Controls the influence of previous frames to reduce flickering. (Default: 0.5 | Fast Motion: 0.4 | Static: 0.9)
+- **dlaa_strength:** Power of the Smart DLAA neural reconstruction model. (Default: 0.6 | Subtle: 0.4 | Aggressive: 1.0)
+- **sharpen_strength:** Final crispness adjustment to enhance edge and texture definition. (Default: 0.2 | Off: 0.0 | Maximum: 2.0)
+- **motion_sensitivity:** Threshold to disable temporal smoothing in moving areas. (Default: 0.1 | Flicker-free: 0.08 | High-speed: 0.3)
 
 ---
 
