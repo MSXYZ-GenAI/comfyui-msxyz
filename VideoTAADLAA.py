@@ -338,15 +338,15 @@ class VideoTAADLAA:
                     raw_luma = torch.mean(rgb) 
                     new_luma = torch.mean(refined)
 
-                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(1.0, 1.25) 
-                    refined = refined * luma_boost
+                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(1.0, 1.35) 
+                    refined = (refined * luma_boost).clamp(0.0, 1.0) 
                     
                     # Smart Clarity
                     low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details)
                     
-                    auto_clarity_gain = (0.05 / (detail_std + 1e-6)).clamp(0.0, 0.6)
+                    auto_clarity_gain = (0.06 / (detail_std + 1e-6)).clamp(0.0, 0.6) 
                     refined = refined + (details * auto_clarity_gain)
 
                     # Final result
