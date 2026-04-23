@@ -120,7 +120,7 @@ def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
-        self.taa       = TAAState()
+        self.taa = TAAState()
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -142,6 +142,7 @@ class VideoTAADLAA:
         key = str(device)
         if key not in self.net_cache:
             net = DLAANet().to(device)
+            net = net.to(memory_format=torch.channels_last)
 
             base_path = os.path.dirname(os.path.realpath(__file__))
             path      = os.path.join(base_path, "DLAANet.pth")
@@ -283,10 +284,15 @@ class VideoTAADLAA:
         else:
             print(f"\033[92m[DLAA] Single-pass mode: {H}x{W}\033[0m")
 
-        with torch.inference_mode():
+        with torch.inference_mode(), torch.autocast(
+            device_type="cuda",
+            dtype=torch.float16,
+            enabled=(device.type == "cuda")
+        ):
             for i in range(B):
-                img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
+                img = images[i:i+1].to(device).permute(0, 3, 1, 2)
                 rgb = img[:, :3]
+                rgb = rgb.contiguous(memory_format=torch.channels_last).float()
 
                 # jitter
                 fid = self.taa.frame_id
