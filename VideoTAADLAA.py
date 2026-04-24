@@ -18,6 +18,13 @@ logger = logging.getLogger("VideoTAADLAA")
 
 # Model Inference
 class DLAANet(nn.Module):
+    """
+    Notes:
+    - Early layers stabilize edges and low-level detail
+    - Deeper layers use LeakyReLU for stronger gradient flow
+    - Dilated convs expand receptive field without attention
+    - Temporal consistency is handled externally (TAA module)
+    """
     def __init__(self):
         super().__init__()
 
@@ -29,37 +36,48 @@ class DLAANet(nn.Module):
             torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
 
         self.enc1 = nn.Sequential(
+            # low-level stabilization
             nn.Conv2d(3, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(inplace=True),  # daha stabil ve az agresif
         )
+
         self.enc2 = nn.Sequential(
+            # mid-level extraction
             nn.Conv2d(64, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
         )
+
         self.bottleneck = nn.Sequential(
+            # approximate motion context (no explicit flow inside network)
             nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
 
+            # wider receptive field aggregation
             nn.Conv2d(64, 64, 3, padding=4, dilation=4, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
 
+            # refinement stage
             nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
         )
+
         self.dec = nn.Sequential(
+            # skip + bottleneck fusion
             nn.Conv2d(128, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
 
+            # compression stage
             nn.Conv2d(64, 32, 3, padding=1, bias=False),
             nn.GroupNorm(4, 32),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(inplace=True),
         )
+
         self.reconstructor = nn.Conv2d(32, 3, 3, padding=1, bias=False)
 
         self._init_weights()
@@ -82,29 +100,100 @@ class DLAANet(nn.Module):
         return x + r
 
 
+# Temporal Anti-Aliasing
 class TAAState:
     def __init__(self):
-        self.history  = None
+        self.history = None
         self.frame_id = 0
+
+        # stabilizasyon parametreleri
+        self.feedback = 0.2    # history weight
+        self.min_alpha = 0.08  # motion sırasında bile minimum
+        self.max_alpha = 0.35  # aşırı stabilize olmasın
 
     def reset(self):
-        self.history  = None
+        self.history = None
         self.frame_id = 0
 
+    def optical_flow(self, frame1, frame2):
+        if frame1.shape != frame2.shape:
+            frame2 = F.interpolate(
+                frame2,
+                size=frame1.shape[-2:],
+                mode="bilinear",
+                align_corners=False
+            )
+
+        g1 = frame1.mean(dim=1, keepdim=True)
+        g2 = frame2.mean(dim=1, keepdim=True)
+
+        diff = g2 - g1
+
+        flow_x = torch.roll(diff, 1, dims=3) - torch.roll(diff, -1, dims=3)
+        flow_y = torch.roll(diff, 1, dims=2) - torch.roll(diff, -1, dims=2)
+
+        flow = torch.cat([flow_x, flow_y], dim=1)
+
+        flow = torch.tanh(flow) * 2.0
+        flow = torch.clamp(flow, -2.5, 2.5)
+
+        return flow
+
+    def warp_frame(self, x, flow):
+        B, C, H, W = x.shape
+
+        grid_y, grid_x = torch.meshgrid(
+            torch.arange(H, device=x.device),
+            torch.arange(W, device=x.device),
+            indexing="ij"
+        )
+
+        grid = torch.stack((grid_x, grid_y), dim=0).float()
+        grid = grid.unsqueeze(0).repeat(B, 1, 1, 1)
+
+        vgrid = grid + flow
+
+        vgrid[:, 0] = 2.0 * vgrid[:, 0] / max(W - 1, 1) - 1.0
+        vgrid[:, 1] = 2.0 * vgrid[:, 1] / max(H - 1, 1) - 1.0
+
+        vgrid = vgrid.permute(0, 2, 3, 1)
+
+        return F.grid_sample(
+            x, vgrid,
+            mode='bilinear',
+            padding_mode='reflection',
+            align_corners=False
+        )
+
     def update(self, frame, alpha, sensitivity):
-        if self.history is None or self.history.shape != frame.shape:
-            self.history = frame.detach().clone().to(frame.device)
+        if self.history is None:
+            self.history = frame.detach()
             return frame
 
-        local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
-        local_max =  F.max_pool2d( frame, kernel_size=3, stride=1, padding=1)
-        history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
+        # motion
+        flow = self.optical_flow(self.history, frame)
+        warped = self.warp_frame(self.history, flow)
 
-        diff          = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        motion_mask   = torch.sigmoid((diff - sensitivity) * 15.0)
-        dynamic_alpha = alpha * (1.0 - motion_mask)
+        # clamp
+        local_max = F.max_pool2d(frame, 3, 1, 1)
+        local_min = -F.max_pool2d(-frame, 3, 1, 1)
 
-        out = torch.lerp(frame, history_clipped, dynamic_alpha)
+        warped = torch.clamp(warped, local_min, local_max)
+
+        # motion detection
+        diff = (frame - warped).abs().mean(dim=1, keepdim=True)
+        motion = torch.sigmoid((diff - sensitivity) * 12.0)
+
+        # adaptive alpha
+        a = alpha * (1.0 - motion)
+        a = torch.clamp(a, self.min_alpha, self.max_alpha)
+
+        # Temporal accumulation
+        out = warped * (1.0 - a) + frame * a
+
+        # Stabilization
+        out = out * self.feedback + frame * (1.0 - self.feedback)
+
         self.history = out.detach()
         return out
 
@@ -292,7 +381,23 @@ class VideoTAADLAA:
             for i in range(B):
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2)
                 rgb = img[:, :3]
+                has_alpha = img.shape[1] == 4
+                if has_alpha:
+                    alpha_channel = img[:, 3:4]
+                    rgb = img[:, :3]
+                else:
+                    rgb = img
                 rgb = rgb.contiguous(memory_format=torch.channels_last).float()
+                
+                # Resolution Check 
+                current_shape = rgb.shape
+
+                if hasattr(self, "_last_shape"):
+                    if self._last_shape != current_shape:
+                        print(f"[DLAA] Resolution change detected: {self._last_shape} → {current_shape}")
+                        self.taa.reset()
+
+                self._last_shape = current_shape
 
                 # jitter
                 fid = self.taa.frame_id
@@ -308,46 +413,31 @@ class VideoTAADLAA:
 
                 # DLAA Smart Neural Pass
                 if dlaa_strength > 0:
-                    # AI Processing
                     try:
                         refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
                     except RuntimeError as OOMRec:
                         if "out of memory" in str(OOMRec).lower():
-                            print("\033[91m[DLAA] OOM detected, retrying with smaller tiles...\033[0m")
+                            torch.cuda.empty_cache()
                             tile_try = tile_size // 2
 
-                            for _ in range(3):
-                                try:
-                                    refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
-                                    break # Exit if successful
-                                except RuntimeError as OOMRecInner:
-                                    if "out of memory" in str(OOMRecInner).lower():
-                                        print(f"\033[91m[DLAA] OOM → retry with {tile_try//2}px\033[0m")
-                                        if torch.cuda.is_available():
-                                            torch.cuda.empty_cache()
-                                        tile_try = max(256, tile_try // 2)
-                                    else:
-                                        raise OOMRecInner
-                            else:
-                                raise RuntimeError("DLAA failed even after retries")
-                        else:
-                            raise OOMRec
+                            refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
+                        else: raise OOMRec
 
                     
                     # Smart Luma
-                    raw_luma = torch.mean(rgb) 
-                    new_luma = torch.mean(refined)
+                    raw_luma = rgb.mean(dim=[1,2,3], keepdim=True) 
+                    new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
-                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(1.0, 1.35) 
+                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.85, 1.15)
                     refined = (refined * luma_boost).clamp(0.0, 1.0) 
                     
                     # Smart Clarity
                     low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
                     details = refined - low_freq
-                    detail_std = torch.std(details)
+                    detail_std = torch.std(details, dim=[2,3], keepdim=True)
                     
-                    auto_clarity_gain = (0.06 / (detail_std + 1e-6)).clamp(0.0, 0.6) 
-                    refined = refined + (details * auto_clarity_gain)
+                    auto_clarity_gain = (0.06 / (detail_std + 1e-6)).clamp(0.0, 0.7) 
+                    refined = (refined + (details * auto_clarity_gain)).clamp(0.0, 1.0)
 
                     # Final result
                     mse = torch.mean((refined - rgb) ** 2).item()
@@ -361,7 +451,13 @@ class VideoTAADLAA:
                 # Post-sharpening
                 if sharpen_strength > 0:
                     rgb = _unsharp_mask(rgb, sharpen_strength)
-
+                
+                if has_alpha:
+                    # Alpha'yı aynı boyuta getir (eğer tiling/padding yüzünden değiştiyse)
+                    if alpha_channel.shape[-2:] != rgb.shape[-2:]:
+                        alpha_channel = F.interpolate(alpha_channel, size=rgb.shape[-2:], mode="bilinear")
+                    rgb = torch.cat([rgb, alpha_channel], dim=1)
+                    
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
 
                 if mm is not None and i > 0 and i % 50 == 0:
