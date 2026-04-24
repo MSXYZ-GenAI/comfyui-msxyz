@@ -1,6 +1,7 @@
-# Created by MSXYZ (AI-assisted)
-# Temporal (TAA) + DLAA Anti-Aliasing Inference
-# v0.1.1 - Smart Neural Pass
+# Video TAA + DLAA Custom Node for ComfyUI
+# Author: MSXYZ (AI-Assisted)
+# Version: 0.1.1
+# License: MIT
 
 import torch
 import torch.nn as nn
@@ -19,11 +20,8 @@ logger = logging.getLogger("VideoTAADLAA")
 # Model Inference
 class DLAANet(nn.Module):
     """
-    Notes:
-    - Early layers stabilize edges and low-level detail
-    - Deeper layers use LeakyReLU for stronger gradient flow
-    - Dilated convs expand receptive field without attention
-    - Temporal consistency is handled externally (TAA module)
+    Dilated Convolutional Network for Deep Learning Anti-Aliasing (DLAA).
+    Expects pre-calculated temporal states from external TAA module.
     """
     def __init__(self):
         super().__init__()
@@ -34,51 +32,47 @@ class DLAANet(nn.Module):
             torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("jitter_offsets",
             torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
-
+        
+        # Channel expansion to 96
         self.enc1 = nn.Sequential(
-            # low-level stabilization
-            nn.Conv2d(3, 64, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 64),
-            nn.ReLU(inplace=True),  # daha stabil ve az agresif
+            nn.Conv2d(3, 96, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 96),
+            nn.ReLU(inplace=True),
         )
 
         self.enc2 = nn.Sequential(
-            # mid-level extraction
-            nn.Conv2d(64, 64, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(96, 96, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 96),
             nn.LeakyReLU(0.2, inplace=True),
         )
-
+        
+        # Dilated bottleneck
         self.bottleneck = nn.Sequential(
-            # approximate motion context (no explicit flow inside network)
-            nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(96, 128, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(8, 128),
             nn.LeakyReLU(0.2, inplace=True),
 
-            # wider receptive field aggregation
-            nn.Conv2d(64, 64, 3, padding=4, dilation=4, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=4, dilation=4, bias=False),
+            nn.GroupNorm(8, 128),
             nn.LeakyReLU(0.2, inplace=True),
 
-            # refinement stage
-            nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(8, 128),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.dec = nn.Sequential(
-            # skip + bottleneck fusion
+            nn.Conv2d(224, 128, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 128),
+            nn.LeakyReLU(0.2, inplace=True),
+
             nn.Conv2d(128, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
-
-            # compression stage
-            nn.Conv2d(64, 32, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 32),
-            nn.ReLU(inplace=True),
         )
-
-        self.reconstructor = nn.Conv2d(32, 3, 3, padding=1, bias=False)
+        
+        # RECONSTRUCTOR
+        self.reconstructor = nn.Conv2d(64, 3, 3, padding=1, bias=False)
 
         self._init_weights()
 
@@ -92,11 +86,13 @@ class DLAANet(nn.Module):
         nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
-        e1 = self.enc1(x)
-        e2 = self.enc2(e1)
-        b  = self.bottleneck(e2)
-        d  = self.dec(torch.cat([b, e1], dim=1))
+        e1 = self.enc1(x)          # 3 → 96
+        e2 = self.enc2(e1)         # 96 → 96
+        b  = self.bottleneck(e2)   # 96 → 128
+
+        d  = self.dec(torch.cat([b, e1], dim=1))  # 128 + 96 = 224
         r  = self.reconstructor(d)
+
         return x + r
 
 
@@ -106,17 +102,17 @@ class TAAState:
         self.history = None
         self.frame_id = 0
 
-        # stabilizasyon parametreleri
-        self.min_alpha = 0.08  # motion sırasında bile minimum
-        self.max_alpha = 0.35  # aşırı stabilize olmasın
+        # Stabilization bounds
+        self.min_alpha = 0.08  # Minimum blend factor
+        self.max_alpha = 0.35  # Prevents ghosting
 
     def reset(self):
         self.history = None
         self.frame_id = 0
 
     def optical_flow(self, frame1, frame2):
-        diff = frame2 - frame1  # direkt fark
-        # Gaussian smooth ile gürültüyü azalt
+        diff = frame2 - frame1  # Raw frame
+        # Reduce noise via Gaussian smoothing
         flow = F.avg_pool2d(
             F.pad(diff.mean(1, keepdim=True).repeat(1,2,1,1), [2,2,2,2], mode="reflect"),
             5, stride=1
@@ -392,7 +388,7 @@ class VideoTAADLAA:
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
-                # DLAA Smart Neural Pass
+                # DLAA Neural Pass
                 if dlaa_strength > 0:
                     try:
                         refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
@@ -405,14 +401,14 @@ class VideoTAADLAA:
                         else: raise OOMRec
 
                     
-                    # Smart Luma
+                    # Luminance Conservation
                     raw_luma = rgb.mean(dim=[1,2,3], keepdim=True) 
                     new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
                     luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.97, 1.03)
                     refined = (refined * luma_boost).clamp(0.0, 1.0) 
                     
-                    # Smart Clarity
+                    # Adaptive Variance-based Sharpening
                     low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details, dim=[2,3], keepdim=True)
@@ -434,7 +430,7 @@ class VideoTAADLAA:
                     rgb = _unsharp_mask(rgb, sharpen_strength)
                 
                 if has_alpha:
-                    # Alpha'yı aynı boyuta getir (eğer tiling/padding yüzünden değiştiyse)
+                    # Resize alpha if dimensions changed due to padding/tiling
                     if alpha_channel.shape[-2:] != rgb.shape[-2:]:
                         alpha_channel = F.interpolate(alpha_channel, size=rgb.shape[-2:], mode="bilinear")
                     rgb = torch.cat([rgb, alpha_channel], dim=1)
