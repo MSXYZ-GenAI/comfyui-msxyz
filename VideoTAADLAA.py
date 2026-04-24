@@ -217,7 +217,7 @@ class VideoTAADLAA:
 
             # state_dict load
             state_dict = torch.load(path, map_location=device)
-            net.load_state_dict(state_dict)
+            net.load_state_dict(state_dict, strict=False) 
             net.eval()
 
             n_params = sum(p.numel() for p in net.parameters())
