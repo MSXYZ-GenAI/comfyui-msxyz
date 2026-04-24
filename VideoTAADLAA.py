@@ -107,7 +107,7 @@ class TAAState:
         self.frame_id = 0
         self.grid = None # clear Cache
 
-    def optical_flow(self, frame1, frame2):
+    def motion_estimation(self, frame1, frame2):
         # avg_pool
         diff = (frame2 - frame1).mean(1, keepdim=True)
         flow = F.avg_pool2d(diff.repeat(1,2,1,1), 3, stride=1, padding=1)
@@ -115,7 +115,7 @@ class TAAState:
 
     def warp_frame(self, x, flow):
         B, C, H, W = x.shape
-        # Cache Control
+        # Caching
         if self.grid is None or self.grid.shape[2:] != (H, W):
             grid_y, grid_x = torch.meshgrid(
                 torch.arange(H, device=x.device),
@@ -142,7 +142,7 @@ class TAAState:
             return frame
 
         # motion
-        flow = self.optical_flow(self.history, frame)
+        flow = self.motion_estimation(self.history, frame)
         warped = self.warp_frame(self.history, flow)
 
         # clamp
@@ -159,7 +159,7 @@ class TAAState:
         a = alpha * (1.0 - motion)
         a = torch.clamp(a, self.min_alpha, self.max_alpha)
 
-        # Temporal accumulation
+        # Accumulation
         out = warped * (1.0 - a) + frame * a
         self.history = out.detach()
         
@@ -247,7 +247,7 @@ class VideoTAADLAA:
                 tile         = x[:, :, y0_c:y1, x0_c:x1]
                 refined_tile = torch.clamp(net(tile), 0.0, 1.0)
 
-                # Smooth blend weight
+                # Smooth blend
                 th, tw = refined_tile.shape[2], refined_tile.shape[3]
                 w_map  = torch.ones(1, 1, th, tw, device=x.device, dtype=x.dtype)
                 ramp   = min(overlap, th // 4, tw // 4)
@@ -297,7 +297,7 @@ class VideoTAADLAA:
         sx   = F.conv2d(gray, net.sobel_x, padding=1)
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
         
-        # Using absolute value (abs) sum instead of square root (sqrt) is ~40% faster and produces the same result!
+        # Sum of absolute values
         edge = torch.abs(sx) + torch.abs(sy) 
         
         mask = torch.sigmoid((edge - thr) * 8.0)
@@ -413,14 +413,14 @@ class VideoTAADLAA:
                         
                         refined = refined.to(rgb.dtype)
 
-                    # Luminance Conservation
+                    # Luminance
                     raw_luma = rgb.mean(dim=[1,2,3], keepdim=True) 
                     new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
                     luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.97, 1.03)
                     refined *= luma_boost # Accelerated with in-place multiplication
                     
-                    # Adaptive Variance-based Sharpening
+                    # Sharpening
                     low_freq = F.avg_pool2d(F.pad(refined, [1, 1, 1, 1], mode="reflect"), 3, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details, dim=[2,3], keepdim=True)
