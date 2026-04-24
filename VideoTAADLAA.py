@@ -125,7 +125,7 @@ class TAAState:
             self.grid = torch.stack((grid_x, grid_y), dim=0).float().unsqueeze(0)
 
         vgrid = self.grid + flow
-        # Normalizasyon
+        # Normalization
         vgrid[:, 0] = 2.0 * vgrid[:, 0] / (W - 1) - 1.0
         vgrid[:, 1] = 2.0 * vgrid[:, 1] / (H - 1) - 1.0
 
@@ -254,10 +254,10 @@ class VideoTAADLAA:
 
                 if ramp > 0:
                     r = torch.linspace(0, 1, ramp, device=x.device, dtype=x.dtype).view(1, 1, -1, 1)
-                    # Dikey doğrultu (Üst/Alt)
+                    # Vertical direction (Top/Bottom)
                     w_map[:, :, :ramp, :] *= r 
                     w_map[:, :, -ramp:, :] *= r.flip(2)
-                    # Yatay doğrultu (Sol/Sağ)
+                    # Horizontal direction (Left/Right)
                     w_map[:, :, :, :ramp] *= r.transpose(2, 3) 
                     w_map[:, :, :, -ramp:] *= r.flip(2).transpose(2, 3)
 
@@ -265,7 +265,7 @@ class VideoTAADLAA:
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
 
                 del refined_tile
-                # Sadece çok büyük resimlerde her tile sonrası boşaltma yap (Hızı korumak için)
+                # Flush cache only after each tile for very large images (to preserve speed)
                 if H > 2048 or W > 2048:
                     torch.cuda.empty_cache()
 
@@ -297,7 +297,7 @@ class VideoTAADLAA:
         sx   = F.conv2d(gray, net.sobel_x, padding=1)
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
         
-        # Karekök (sqrt) yerine Mutlak Değer (abs) toplamı kullanmak %40 daha hızlıdır ve aynı işi yapar!
+        # Using absolute value (abs) sum instead of square root (sqrt) is ~40% faster and produces the same result!
         edge = torch.abs(sx) + torch.abs(sy) 
         
         mask = torch.sigmoid((edge - thr) * 8.0)
@@ -337,18 +337,18 @@ class VideoTAADLAA:
         B, H, W, C = images.shape
         out_list   = []
         
-        # VRAM Optimizasyon
+        # VRAM Optimization
         if mm is not None:
             vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
         else:
             vram_mb = 8192
 
         if vram_mb < 12000:       # 8-12GB VRAM
-            tile_size = 768       # 1024'ten 768'e çektik
+            tile_size = 768       # Reduced from 1024 to 768
         elif vram_mb < 20000:     # 16GB VRAM
-            tile_size = 1024      # 1280'den 1024'e çektik
+            tile_size = 1024      # Reduced from 1280 to 1024
         else:                     # 24GB+ VRAM
-            tile_size = 1536      # 2048'den 1536'ya çektik (En güvenli ve hızlı sınır)
+            tile_size = 1536      # Reduced from 2048 to 1536 (Safest and fastest limit)
 
         # Log tiling
         if H > tile_size or W > tile_size:
@@ -358,7 +358,7 @@ class VideoTAADLAA:
         else:
             print(f"\033[92m[DLAA] Single-pass mode: {H}x{W}\033[0m")
         
-        # Güç değerlerini döngüden önce Tensor'e çevir
+        # Convert strength values to Tensor before the loop
         taa_s_t  = torch.tensor(taa_strength, dtype=torch.float16, device=device)
         dlaa_s_t = torch.tensor(dlaa_strength, dtype=torch.float16, device=device)
         
@@ -418,14 +418,14 @@ class VideoTAADLAA:
                     new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
                     luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.97, 1.03)
-                    refined *= luma_boost # In-place çarpma ile hızlandırıldı
+                    refined *= luma_boost # Accelerated with in-place multiplication
                     
                     # Adaptive Variance-based Sharpening
                     low_freq = F.avg_pool2d(F.pad(refined, [1, 1, 1, 1], mode="reflect"), 3, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details, dim=[2,3], keepdim=True)
                     
-                    # Mean() hesabını tek seferde yaparak GPU yükü azaltıldı
+                    # Reduced GPU load by computing mean() in a single pass
                     auto_clarity_gain = (detail_std / (detail_std.mean() + 1e-6)).clamp(0.0, 0.6) 
                     refined += (details * auto_clarity_gain) 
                     refined = refined.clamp(0.0, 1.0)
