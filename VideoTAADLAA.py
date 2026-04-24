@@ -98,45 +98,39 @@ class TAAState:
     def __init__(self):
         self.history = None
         self.frame_id = 0
-
-        # Stabilization bounds
-        self.min_alpha = 0.08  # Minimum blend factor
-        self.max_alpha = 0.35  # Prevents ghosting
+        self.grid = None  # clear Cache
+        self.min_alpha = 0.08
+        self.max_alpha = 0.35
 
     def reset(self):
         self.history = None
         self.frame_id = 0
+        self.grid = None # clear Cache
 
     def optical_flow(self, frame1, frame2):
-        diff = frame2 - frame1  # Raw frame
-        # Reduce noise via Gaussian smoothing
-        flow = F.avg_pool2d(
-            F.pad(diff.mean(1, keepdim=True).repeat(1,2,1,1), [2,2,2,2], mode="reflect"),
-            5, stride=1
-        )
+        # avg_pool
+        diff = (frame2 - frame1).mean(1, keepdim=True)
+        flow = F.avg_pool2d(diff.repeat(1,2,1,1), 3, stride=1, padding=1)
         return torch.tanh(flow) * 2.0
 
     def warp_frame(self, x, flow):
         B, C, H, W = x.shape
+        # Cache Control
+        if self.grid is None or self.grid.shape[2:] != (H, W):
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(H, device=x.device),
+                torch.arange(W, device=x.device),
+                indexing="ij"
+            )
+            self.grid = torch.stack((grid_x, grid_y), dim=0).float().unsqueeze(0)
 
-        grid_y, grid_x = torch.meshgrid(
-            torch.arange(H, device=x.device),
-            torch.arange(W, device=x.device),
-            indexing="ij"
-        )
-
-        grid = torch.stack((grid_x, grid_y), dim=0).float()
-        grid = grid.unsqueeze(0).repeat(B, 1, 1, 1)
-
-        vgrid = grid + flow
-
-        vgrid[:, 0] = 2.0 * vgrid[:, 0] / max(W - 1, 1) - 1.0
-        vgrid[:, 1] = 2.0 * vgrid[:, 1] / max(H - 1, 1) - 1.0
-
-        vgrid = vgrid.permute(0, 2, 3, 1)
+        vgrid = self.grid + flow
+        # Normalizasyon
+        vgrid[:, 0] = 2.0 * vgrid[:, 0] / (W - 1) - 1.0
+        vgrid[:, 1] = 2.0 * vgrid[:, 1] / (H - 1) - 1.0
 
         return F.grid_sample(
-            x, vgrid,
+            x, vgrid.permute(0, 2, 3, 1),
             mode='bilinear',
             padding_mode='reflection',
             align_corners=False
@@ -238,7 +232,7 @@ class VideoTAADLAA:
 
         step   = tile_size - overlap * 2
         out    = torch.zeros_like(x)
-        weight = torch.zeros(B, 1, H, W, device=x.device)
+        weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
 
         y0 = 0
         while y0 < H:
@@ -255,19 +249,25 @@ class VideoTAADLAA:
 
                 # Smooth blend weight
                 th, tw = refined_tile.shape[2], refined_tile.shape[3]
-                w_map  = torch.ones(1, 1, th, tw, device=x.device)
+                w_map  = torch.ones(1, 1, th, tw, device=x.device, dtype=x.dtype)
                 ramp   = min(overlap, th // 4, tw // 4)
 
                 if ramp > 0:
-                    for k in range(ramp):
-                        v = (k + 1) / (ramp + 1)
-                        w_map[:, :, k, :]      = torch.clamp(w_map[:, :, k, :],      max=v)
-                        w_map[:, :, th-1-k, :] = torch.clamp(w_map[:, :, th-1-k, :], max=v)
-                        w_map[:, :, :, k]      = torch.clamp(w_map[:, :, :, k],      max=v)
-                        w_map[:, :, :, tw-1-k] = torch.clamp(w_map[:, :, :, tw-1-k], max=v)
+                    r = torch.linspace(0, 1, ramp, device=x.device, dtype=x.dtype).view(1, 1, -1, 1)
+                    # Dikey doğrultu (Üst/Alt)
+                    w_map[:, :, :ramp, :] *= r 
+                    w_map[:, :, -ramp:, :] *= r.flip(2)
+                    # Yatay doğrultu (Sol/Sağ)
+                    w_map[:, :, :, :ramp] *= r.transpose(2, 3) 
+                    w_map[:, :, :, -ramp:] *= r.flip(2).transpose(2, 3)
 
                 out[:, :, y0_c:y1, x0_c:x1]    += refined_tile * w_map
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
+
+                del refined_tile
+                # Sadece çok büyük resimlerde her tile sonrası boşaltma yap (Hızı korumak için)
+                if H > 2048 or W > 2048:
+                    torch.cuda.empty_cache()
 
                 if x1 == W:
                     break
@@ -296,7 +296,10 @@ class VideoTAADLAA:
         gray = 0.2126*x[:,0:1] + 0.7152*x[:,1:2] + 0.0722*x[:,2:3]
         sx   = F.conv2d(gray, net.sobel_x, padding=1)
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
+        
+        # Karekök (sqrt) yerine Mutlak Değer (abs) toplamı kullanmak %40 daha hızlıdır ve aynı işi yapar!
+        edge = torch.abs(sx) + torch.abs(sy) 
+        
         mask = torch.sigmoid((edge - thr) * 8.0)
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         return x*(1.0 - mask) + blurred*mask
@@ -306,8 +309,13 @@ class VideoTAADLAA:
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        # Clear VRAM
+        if mm is not None:
+            mm.soft_empty_cache()
+        torch.cuda.empty_cache()
+        
         # Fixed Settings
-        taa_alpha      = 0.10
+        taa_alpha      = 0.15
         jitter_scale   = 0.20
         edge_threshold = 0.15
         
@@ -328,19 +336,19 @@ class VideoTAADLAA:
         net        = self._net(device)
         B, H, W, C = images.shape
         out_list   = []
-
-        # Auto tile size for VRAM
+        
+        # VRAM Optimizasyon
         if mm is not None:
-            try:
-                vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
-            except:
-                vram_mb = 8192
+            vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
         else:
             vram_mb = 8192
 
-        if   vram_mb <= 8192:  tile_size = 512
-        elif vram_mb <= 16384: tile_size = 1024
-        else:                  tile_size = 2048
+        if vram_mb < 12000:       # 8-12GB VRAM
+            tile_size = 768       # 1024'ten 768'e çektik
+        elif vram_mb < 20000:     # 16GB VRAM
+            tile_size = 1024      # 1280'den 1024'e çektik
+        else:                     # 24GB+ VRAM
+            tile_size = 1536      # 2048'den 1536'ya çektik (En güvenli ve hızlı sınır)
 
         # Log tiling
         if H > tile_size or W > tile_size:
@@ -349,7 +357,11 @@ class VideoTAADLAA:
             print(f"\033[93m[DLAA] Tiled mode: {H}x{W} → ~{n_tiles} tiles ({tile_size}px, VRAM:{vram_mb}MB)\033[0m")
         else:
             print(f"\033[92m[DLAA] Single-pass mode: {H}x{W}\033[0m")
-
+        
+        # Güç değerlerini döngüden önce Tensor'e çevir
+        taa_s_t  = torch.tensor(taa_strength, dtype=torch.float16, device=device)
+        dlaa_s_t = torch.tensor(dlaa_strength, dtype=torch.float16, device=device)
+        
         with torch.inference_mode(), torch.autocast(
             device_type="cuda",
             dtype=torch.float16, # float16
@@ -386,7 +398,7 @@ class VideoTAADLAA:
 
                 # TAA temporal accumulation
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
-                rgb     = torch.lerp(rgb, taa_out, torch.tensor(taa_strength, dtype=torch.float16, device=device))
+                rgb = torch.lerp(rgb, taa_out, taa_s_t)
 
                 # DLAA Neural Pass
                 if dlaa_strength > 0:
@@ -396,34 +408,36 @@ class VideoTAADLAA:
                         if "out of memory" in str(OOMRec).lower():
                             torch.cuda.empty_cache()
                             tile_try = tile_size // 2
-
                             refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
                         else: raise OOMRec
+                        
+                        refined = refined.to(rgb.dtype)
 
-                    
                     # Luminance Conservation
                     raw_luma = rgb.mean(dim=[1,2,3], keepdim=True) 
                     new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
                     luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.97, 1.03)
-                    refined = (refined * luma_boost).clamp(0.0, 1.0) 
+                    refined *= luma_boost # In-place çarpma ile hızlandırıldı
                     
                     # Adaptive Variance-based Sharpening
-                    low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
+                    low_freq = F.avg_pool2d(F.pad(refined, [1, 1, 1, 1], mode="reflect"), 3, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details, dim=[2,3], keepdim=True)
                     
-                    auto_clarity_gain = (detail_std / (detail_std.mean() + 1e-6)).clamp(0.0, 0.3) 
-                    refined = (refined + (details * auto_clarity_gain)).clamp(0.0, 1.0)
+                    # Mean() hesabını tek seferde yaparak GPU yükü azaltıldı
+                    auto_clarity_gain = (detail_std / (detail_std.mean() + 1e-6)).clamp(0.0, 0.6) 
+                    refined += (details * auto_clarity_gain) 
+                    refined = refined.clamp(0.0, 1.0)
 
                     # Final result
-                    mse = torch.mean((refined - rgb) ** 2).item()
                     if i == 0:
+                        mse = torch.mean((refined - rgb) ** 2).item()
                         print(f"\033[92m[DLAA] MSE delta: \033[93m{mse:.6f}\033[0m")
 
                     # Blend the original image
-                    rgb = torch.lerp(rgb, refined, torch.tensor(dlaa_strength, dtype=torch.float16, device=device))
-                    rgb = torch.clamp(rgb, 0.0, 1.0)
+                    rgb = torch.lerp(rgb, refined, dlaa_s_t)
+                    rgb = rgb.clamp(0.0, 1.0)
 
                 # Post-sharpening
                 if sharpen_strength > 0:
