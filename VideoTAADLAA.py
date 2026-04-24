@@ -19,10 +19,8 @@ try:
 except:
     mm = None
 
-logger = logging.getLogger("VideoTAADLAA")
 
 
-# Inference
 class DLAANet(nn.Module):
     """ Inference (~1M Parameters) """
     def __init__(self):
@@ -111,7 +109,7 @@ class TAAState:
         self.history = out.detach()
         return out
 
-# Sharpen helper
+
 def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
     if strength < 1e-4:
         return x
@@ -119,7 +117,7 @@ def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
     return torch.clamp(x + (x - blurred) * strength, 0.0, 1.0)
 
 
-# ComfyUI
+
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
@@ -157,7 +155,6 @@ class VideoTAADLAA:
             net.eval()
 
             n_params = sum(p.numel() for p in net.parameters())
-            print(f"\033[92m[DLAA] Model loaded: {path}  ({n_params:,} params)\033[0m")
 
             self.net_cache[key] = net
 
@@ -168,7 +165,6 @@ class VideoTAADLAA:
         # Splits x into overlapping tiles to reduce VRAM usage
         B, C, H, W = x.shape
 
-        # Small image
         if H <= tile_size and W <= tile_size:
             return torch.clamp(net(x), 0.0, 1.0)
 
@@ -189,7 +185,7 @@ class VideoTAADLAA:
                 tile         = x[:, :, y0_c:y1, x0_c:x1]
                 refined_tile = torch.clamp(net(tile), 0.0, 1.0)
 
-                # Smooth blend weight
+
                 th, tw = refined_tile.shape[2], refined_tile.shape[3]
                 w_map  = torch.ones(1, 1, th, tw, device=x.device)
                 ramp   = min(overlap, th // 4, tw // 4)
@@ -242,12 +238,10 @@ class VideoTAADLAA:
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Fixed Settings
         taa_alpha      = 0.10
         jitter_scale   = 0.20
         edge_threshold = 0.15
         
-        # IMAGE or VIDEO
         B, H, W, C = images.shape
         is_single_image = (B == 1)
 
@@ -282,10 +276,7 @@ class VideoTAADLAA:
         if H > tile_size or W > tile_size:
             step    = tile_size - 64
             n_tiles = ((H + step - 1) // step) * ((W + step - 1) // step)
-            print(f"\033[93m[DLAA] Tiled mode: {H}x{W} → ~{n_tiles} tiles ({tile_size}px, VRAM:{vram_mb}MB)\033[0m")
-        else:
-            print(f"\033[92m[DLAA] Single-pass mode: {H}x{W}\033[0m")
-
+        
         with torch.inference_mode():
             for i in range(B):
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
@@ -346,10 +337,6 @@ class VideoTAADLAA:
                     auto_clarity_gain = (0.05 / (detail_std + 1e-6)).clamp(0.0, 0.6)
                     refined = refined + (details * auto_clarity_gain)
 
-                    # Final result
-                    mse = torch.mean((refined - rgb) ** 2).item()
-                    if i == 0:
-                        print(f"\033[92m[DLAA] MSE delta: \033[93m{mse:.6f}\033[0m")
 
                     # Blend the original image
                     rgb = torch.lerp(rgb, refined, dlaa_strength)
