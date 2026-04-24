@@ -24,50 +24,47 @@ logger = logging.getLogger("VideoTAADLAA")
 
 # Inference
 class DLAANet(nn.Module):
+    """ Inference (~1M Parameters) """
     def __init__(self):
         super().__init__()
-
-        self.register_buffer("sobel_x",
-            torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
-        self.register_buffer("sobel_y",
-            torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
-        self.register_buffer("jitter_offsets",
-            torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
+        self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
+        self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
+        self.register_buffer("jitter_offsets", torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
 
         self.enc1 = nn.Sequential(
-            nn.Conv2d(3, 64, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(3, 128, 3, padding=1, bias=False),
+            nn.GroupNorm(16, 128),
             nn.LeakyReLU(0.2, inplace=True),
         )
         self.enc2 = nn.Sequential(
-            nn.Conv2d(64, 64, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=1, bias=False),
+            nn.GroupNorm(16, 128),
             nn.LeakyReLU(0.2, inplace=True),
         )
+        
         self.bottleneck = nn.Sequential(
-            nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(16, 128),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(64, 64, 3, padding=4, dilation=4, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=4, dilation=4, bias=False),
+            nn.GroupNorm(16, 128),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(64, 64, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 64),
+            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(16, 128),
             nn.LeakyReLU(0.2, inplace=True),
         )
+        
         self.dec = nn.Sequential(
+            # b(128) + e1(128) = 256 channels input
+            nn.Conv2d(256, 128, 3, padding=1, bias=False),
+            nn.GroupNorm(16, 128),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(64, 32, 3, padding=1, bias=False),
-            nn.GroupNorm(4, 32),
-            nn.LeakyReLU(0.2, inplace=True),
         )
-        self.reconstructor = nn.Conv2d(32, 3, 3, padding=1, bias=False)
-
+        
+        self.reconstructor = nn.Conv2d(64, 3, 3, padding=1, bias=False)
         self._init_weights()
 
     def _init_weights(self):
@@ -82,9 +79,9 @@ class DLAANet(nn.Module):
     def forward(self, x):
         e1 = self.enc1(x)
         e2 = self.enc2(e1)
-        b  = self.bottleneck(e2)
-        d  = self.dec(torch.cat([b, e1], dim=1))
-        r  = self.reconstructor(d)
+        b = self.bottleneck(e2)
+        d = self.dec(torch.cat([b, e1], dim=1))
+        r = self.reconstructor(d)
         return x + r
 
 
