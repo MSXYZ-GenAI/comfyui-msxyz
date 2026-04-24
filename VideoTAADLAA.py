@@ -205,6 +205,8 @@ class VideoTAADLAA:
         key = str(device)
         if key not in self.net_cache:
             net = DLAANet().to(device)
+            # Half model weight
+            net = net.half() 
             net = net.to(memory_format=torch.channels_last)
 
             base_path = os.path.dirname(os.path.realpath(__file__))
@@ -213,12 +215,13 @@ class VideoTAADLAA:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"[DLAA] Model file not found: {path}")
 
+            # state_dict load
             state_dict = torch.load(path, map_location=device)
             net.load_state_dict(state_dict)
             net.eval()
 
             n_params = sum(p.numel() for p in net.parameters())
-            print(f"\033[92m[DLAA] Model loaded: {path}  ({n_params:,} params)\033[0m")
+            print(f"\033[92m[DLAA] Model loaded: {path}  ({n_params:,} params - Half Precision)\033[0m")
 
             self.net_cache[key] = net
 
@@ -349,7 +352,7 @@ class VideoTAADLAA:
 
         with torch.inference_mode(), torch.autocast(
             device_type="cuda",
-            dtype=torch.float16,
+            dtype=torch.float16, # float16
             enabled=(device.type == "cuda")
         ):
             for i in range(B):
@@ -361,7 +364,7 @@ class VideoTAADLAA:
                     rgb = img[:, :3]
                 else:
                     rgb = img
-                rgb = rgb.contiguous(memory_format=torch.channels_last).float()
+                rgb = rgb.contiguous(memory_format=torch.channels_last).half()
                 
                 # Resolution Check 
                 current_shape = rgb.shape
