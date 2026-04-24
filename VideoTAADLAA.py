@@ -200,7 +200,7 @@ class VideoTAADLAA:
                 "taa_strength"      : ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
                 "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
                 "sharpen_strength"  : ("FLOAT", {"default": 0.0, "min": 0, "max": 2, "step": 0.05}),
-                "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
+                "motion_sensitivity": ("FLOAT", {"default": 0.1, "min": 0, "max": 0.3, "step": 0.01}),
             }
         }
 
