@@ -169,7 +169,7 @@ class TAAState:
         out = warped * (1.0 - a) + frame * a
         self.history = out.detach()
         
-        return out
+        return out.half()
 
 # Sharpen helper
 def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
@@ -386,7 +386,7 @@ class VideoTAADLAA:
 
                 # TAA temporal accumulation
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
-                rgb     = torch.lerp(rgb, taa_out, taa_strength)
+                rgb     = torch.lerp(rgb, taa_out, torch.tensor(taa_strength, dtype=torch.float16, device=device))
 
                 # DLAA Neural Pass
                 if dlaa_strength > 0:
@@ -422,7 +422,7 @@ class VideoTAADLAA:
                         print(f"\033[92m[DLAA] MSE delta: \033[93m{mse:.6f}\033[0m")
 
                     # Blend the original image
-                    rgb = torch.lerp(rgb, refined, dlaa_strength)
+                    rgb = torch.lerp(rgb, refined, torch.tensor(dlaa_strength, dtype=torch.float16, device=device))
                     rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 # Post-sharpening
