@@ -17,14 +17,10 @@ except:
 logger = logging.getLogger("VideoTAADLAA")
 
 
-# Model Inference
+# Inference DLAANet
 class DLAANet(nn.Module):
     """
-    Notes:
-    - Early layers stabilize edges and low-level detail
-    - Deeper layers use LeakyReLU for stronger gradient flow
-    - Dilated convs expand receptive field without attention
-    - Temporal consistency is handled externally (TAA module)
+    Inference reconstruction network
     """
     def __init__(self):
         super().__init__()
@@ -40,13 +36,13 @@ class DLAANet(nn.Module):
             nn.Conv2d(3, 192, 3, padding=1, bias=False),
             nn.GroupNorm(8, 192),
             nn.ReLU(inplace=True),
-        )  # 96 → 192 feature extraction (low-level edges & textures)
+        )  # 96 → 192
 
         self.enc2 = nn.Sequential(
             nn.Conv2d(192, 192, 3, padding=1, bias=False),
             nn.GroupNorm(8, 192),
             nn.LeakyReLU(0.2, inplace=True),
-        )  # 192 → 192 feature refinement
+        )  # 192 → 192
 
         self.bottleneck = nn.Sequential(
             nn.Conv2d(192, 256, 3, padding=2, dilation=2, bias=False),
@@ -60,7 +56,7 @@ class DLAANet(nn.Module):
             nn.Conv2d(256, 256, 3, padding=2, dilation=2, bias=False),
             nn.GroupNorm(8, 256),
             nn.LeakyReLU(0.2, inplace=True),
-        )  # 192 → 256 multi-scale context aggregation
+        )  # 192 → 256 multi-scale
 
         self.dec = nn.Sequential(
             nn.Conv2d(448, 256, 3, padding=1, bias=False),
@@ -70,10 +66,10 @@ class DLAANet(nn.Module):
             nn.Conv2d(256, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
-        )  # 448 → 64 feature fusion + reconstruction prep
+        )  #  reconstruction
 
         self.reconstructor = nn.Conv2d(64, 3, 3, padding=1, bias=False)
-        # 64 → 3 final RGB residual output
+        # final RGB output
 
         self._init_weights()
 
@@ -87,9 +83,9 @@ class DLAANet(nn.Module):
         nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
-        e1 = self.enc1(x)   # 3 → 192
-        e2 = self.enc2(e1)  # 192 → 192
-        b  = self.bottleneck(e2)  # 192 → 256
+        e1 = self.enc1(x)   # 192
+        e2 = self.enc2(e1)  # 192
+        b  = self.bottleneck(e2)  # 256
 
         d = self.dec(torch.cat([b, e1], dim=1))  # 256 + 192 = 448
         r  = self.reconstructor(d)
