@@ -20,8 +20,11 @@ logger = logging.getLogger("VideoTAADLAA")
 # Model Inference
 class DLAANet(nn.Module):
     """
-    Dilated Convolutional Network for Deep Learning Anti-Aliasing (DLAA).
-    Expects pre-calculated temporal states from external TAA module.
+    Notes:
+    - Early layers stabilize edges and low-level detail
+    - Deeper layers use LeakyReLU for stronger gradient flow
+    - Dilated convs expand receptive field without attention
+    - Temporal consistency is handled externally (TAA module)
     """
     def __init__(self):
         super().__init__()
@@ -33,46 +36,44 @@ class DLAANet(nn.Module):
         self.register_buffer("jitter_offsets",
             torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
         
-        # Channel expansion to 96
         self.enc1 = nn.Sequential(
-            nn.Conv2d(3, 96, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 96),
+            nn.Conv2d(3, 192, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 192),
             nn.ReLU(inplace=True),
-        )
+        )  # 96 → 192 feature extraction (low-level edges & textures)
 
         self.enc2 = nn.Sequential(
-            nn.Conv2d(96, 96, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 96),
+            nn.Conv2d(192, 192, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 192),
             nn.LeakyReLU(0.2, inplace=True),
-        )
-        
-        # Dilated bottleneck
+        )  # 192 → 192 feature refinement
+
         self.bottleneck = nn.Sequential(
-            nn.Conv2d(96, 128, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 128),
+            nn.Conv2d(192, 256, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(8, 256),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(128, 128, 3, padding=4, dilation=4, bias=False),
-            nn.GroupNorm(8, 128),
+            nn.Conv2d(256, 256, 3, padding=4, dilation=4, bias=False),
+            nn.GroupNorm(8, 256),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(8, 128),
+            nn.Conv2d(256, 256, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(8, 256),
             nn.LeakyReLU(0.2, inplace=True),
-        )
+        )  # 192 → 256 multi-scale context aggregation
 
         self.dec = nn.Sequential(
-            nn.Conv2d(224, 128, 3, padding=1, bias=False),
-            nn.GroupNorm(8, 128),
+            nn.Conv2d(448, 256, 3, padding=1, bias=False),
+            nn.GroupNorm(8, 256),
             nn.LeakyReLU(0.2, inplace=True),
 
-            nn.Conv2d(128, 64, 3, padding=1, bias=False),
+            nn.Conv2d(256, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
-        )
-        
-        # RECONSTRUCTOR
+        )  # 448 → 64 feature fusion + reconstruction prep
+
         self.reconstructor = nn.Conv2d(64, 3, 3, padding=1, bias=False)
+        # 64 → 3 final RGB residual output
 
         self._init_weights()
 
@@ -86,11 +87,11 @@ class DLAANet(nn.Module):
         nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
-        e1 = self.enc1(x)          # 3 → 96
-        e2 = self.enc2(e1)         # 96 → 96
-        b  = self.bottleneck(e2)   # 96 → 128
+        e1 = self.enc1(x)   # 3 → 192
+        e2 = self.enc2(e1)  # 192 → 192
+        b  = self.bottleneck(e2)  # 192 → 256
 
-        d  = self.dec(torch.cat([b, e1], dim=1))  # 128 + 96 = 224
+        d = self.dec(torch.cat([b, e1], dim=1))  # 256 + 192 = 448
         r  = self.reconstructor(d)
 
         return x + r
