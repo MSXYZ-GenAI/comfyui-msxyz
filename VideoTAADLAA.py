@@ -107,7 +107,6 @@ class TAAState:
         self.frame_id = 0
 
         # stabilizasyon parametreleri
-        self.feedback = 0.2    # history weight
         self.min_alpha = 0.08  # motion sırasında bile minimum
         self.max_alpha = 0.35  # aşırı stabilize olmasın
 
@@ -116,28 +115,13 @@ class TAAState:
         self.frame_id = 0
 
     def optical_flow(self, frame1, frame2):
-        if frame1.shape != frame2.shape:
-            frame2 = F.interpolate(
-                frame2,
-                size=frame1.shape[-2:],
-                mode="bilinear",
-                align_corners=False
-            )
-
-        g1 = frame1.mean(dim=1, keepdim=True)
-        g2 = frame2.mean(dim=1, keepdim=True)
-
-        diff = g2 - g1
-
-        flow_x = torch.roll(diff, 1, dims=3) - torch.roll(diff, -1, dims=3)
-        flow_y = torch.roll(diff, 1, dims=2) - torch.roll(diff, -1, dims=2)
-
-        flow = torch.cat([flow_x, flow_y], dim=1)
-
-        flow = torch.tanh(flow) * 2.0
-        flow = torch.clamp(flow, -2.5, 2.5)
-
-        return flow
+        diff = frame2 - frame1  # direkt fark
+        # Gaussian smooth ile gürültüyü azalt
+        flow = F.avg_pool2d(
+            F.pad(diff.mean(1, keepdim=True).repeat(1,2,1,1), [2,2,2,2], mode="reflect"),
+            5, stride=1
+        )
+        return torch.tanh(flow) * 2.0
 
     def warp_frame(self, x, flow):
         B, C, H, W = x.shape
@@ -190,11 +174,8 @@ class TAAState:
 
         # Temporal accumulation
         out = warped * (1.0 - a) + frame * a
-
-        # Stabilization
-        out = out * self.feedback + frame * (1.0 - self.feedback)
-
         self.history = out.detach()
+        
         return out
 
 # Sharpen helper
@@ -218,7 +199,7 @@ class VideoTAADLAA:
                 "images"            : ("IMAGE",),
                 "taa_strength"      : ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
                 "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT", {"default": 0.15, "min": 0, "max": 2, "step": 0.05}),
+                "sharpen_strength"  : ("FLOAT", {"default": 0.0, "min": 0, "max": 2, "step": 0.05}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
             }
         }
@@ -428,7 +409,7 @@ class VideoTAADLAA:
                     raw_luma = rgb.mean(dim=[1,2,3], keepdim=True) 
                     new_luma = refined.mean(dim=[1,2,3], keepdim=True)
 
-                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.85, 1.15)
+                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(0.97, 1.03)
                     refined = (refined * luma_boost).clamp(0.0, 1.0) 
                     
                     # Smart Clarity
@@ -436,7 +417,7 @@ class VideoTAADLAA:
                     details = refined - low_freq
                     detail_std = torch.std(details, dim=[2,3], keepdim=True)
                     
-                    auto_clarity_gain = (0.06 / (detail_std + 1e-6)).clamp(0.0, 0.7) 
+                    auto_clarity_gain = (detail_std / (detail_std.mean() + 1e-6)).clamp(0.0, 0.3) 
                     refined = (refined + (details * auto_clarity_gain)).clamp(0.0, 1.0)
 
                     # Final result
