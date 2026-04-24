@@ -1,6 +1,12 @@
-# Created by MSXYZ (AI-assisted)
-# Temporal (TAA) + DLAA Anti-Aliasing Inference
-# v0.1.1 - Smart Neural Pass
+# ==============================================================
+#  Author      : MSXYZ
+#  Version     : 0.1.1
+#  Description : Video Temporal Anti-Aliasing + DLAA Pipeline
+#  Framework   : PyTorch / ComfyUI Custom Node
+#  License     : MIT
+#
+#  Developed with AI-assisted tooling and optimization workflows
+# ==============================================================
 
 import torch
 import torch.nn as nn
@@ -16,7 +22,7 @@ except:
 logger = logging.getLogger("VideoTAADLAA")
 
 
-# Model Inference
+# Inference
 class DLAANet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -296,11 +302,11 @@ class VideoTAADLAA:
                 # Edge-based blur
                 rgb = self._edge_aa(rgb, edge_threshold, blur_radius, net)
 
-                # TAA temporal accumulation
+                # TAA accumulation
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
-                # DLAA Smart Neural Pass
+                # DLAA Neural Pass
                 if dlaa_strength > 0:
                     # AI Processing
                     try:
@@ -328,14 +334,14 @@ class VideoTAADLAA:
                             raise OOMRec
 
                     
-                    # Smart Luma
+                    # Luma
                     raw_luma = torch.mean(rgb) 
                     new_luma = torch.mean(refined)
 
                     luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(1.0, 1.25) 
                     refined = refined * luma_boost
                     
-                    # Smart Clarity
+                    # Clarity
                     low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
                     details = refined - low_freq
                     detail_std = torch.std(details)
