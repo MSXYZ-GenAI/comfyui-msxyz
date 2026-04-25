@@ -343,22 +343,33 @@ class VideoTAADLAA:
                         tile_size=tile_size,
                         overlap=32
                     )
-
                     
-                    # Match global luminance
+                    
+                    # Global luminance
                     dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
-                    rgb_mean     = rgb.mean(dim=(1,2,3), keepdim=True)
+                    rgb_mean  = rgb.mean(dim=(1,2,3), keepdim=True)
 
+                    # Base match
                     dlaa_out = dlaa_out - dlaa_mean + rgb_mean
+
+                    # Adaptive gain  (If the model is darkening → the gain increases.)
+                    luma_diff = (rgb_mean - dlaa_mean).abs()
+                    luma_gain = (1.0 + luma_diff * 2.0).clamp(1.0, 1.08)
+
+                    dlaa_out = torch.clamp(dlaa_out * luma_gain, 0.0, 1.0)
                     
                     # Detail enhancement
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
                     local_avg = F.avg_pool2d(luma, 3, stride=1, padding=1)
                     fine_detail = (luma - local_avg)
-                    fine_detail = fine_detail * torch.sigmoid(fine_detail * 10.0)
+                    fine_detail = fine_detail * torch.sigmoid(fine_detail * 8.0)
 
                     local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
-                    detail_gain = (0.03 / (local_detail + 1e-6)).clamp(0.1, 0.2)
+                    global_detail = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
+
+                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(0.08, 0.22)
+                    detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
+
                     dlaa_out = dlaa_out + fine_detail * detail_gain
 
 
