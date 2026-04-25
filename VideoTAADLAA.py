@@ -281,6 +281,20 @@ class VideoTAADLAA:
         jitter_scale   = 0.20
         edge_threshold = 0.15
         
+        highlight_threshold  = 0.85
+        highlight_slope      = 12.0
+        highlight_pre_blend  = 0.15
+        highlight_post_blend = 0.08
+        
+        dlaa_blend_scale = 0.85
+
+        detail_base_scale = 9.0
+        detail_ref_scale  = 0.02
+        detail_min_scale  = 6.0
+        detail_max_scale  = 12.0
+        detail_min_gain   = 0.10
+        detail_max_gain   = 0.26
+        
         B, H, W, C = images.shape
         is_single_image = (B == 1)
 
@@ -381,9 +395,9 @@ class VideoTAADLAA:
                     
                     # Highlight protection
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
-                    highlight_mask = torch.sigmoid((luma - 0.85) * 12.0)
+                    highlight_mask = torch.sigmoid((luma - highlight_threshold) * highlight_slope)
 
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * 0.25)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # Detail enhancement
@@ -394,24 +408,24 @@ class VideoTAADLAA:
 
                     # Adaptive detail shaping
                     detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
-                    detail_scale = (8.0 + (0.02 / (detail_strength + 1e-6))).clamp(6.0, 12.0)
+                    detail_scale = (detail_base_scale + (detail_ref_scale / (detail_strength + 1e-6))).clamp(detail_min_scale, detail_max_scale)
 
                     fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
 
                     local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
                     global_detail = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
 
-                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(0.08, 0.22)
+                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(detail_min_gain, detail_max_gain)
                     detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
 
                     dlaa_out = dlaa_out + fine_detail * detail_gain
                     
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * 0.15)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
 
 
                     # Blend the original
-                    blend_weight = dlaa_strength * 0.85
+                    blend_weight = dlaa_strength * dlaa_blend_scale
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
 
                 # Post-sharpening
