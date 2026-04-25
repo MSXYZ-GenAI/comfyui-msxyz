@@ -309,7 +309,7 @@ class VideoTAADLAA:
 
         if   vram_mb <= 8192:  tile_size = 512
         elif vram_mb <= 16384: tile_size = 1024
-        else:                  tile_size = 2048
+        else:                  tile_size = 1024
 
         # Estimate tile count 
         if H > tile_size or W > tile_size:
@@ -337,12 +337,39 @@ class VideoTAADLAA:
                 # DLAA refinement pass
                 if dlaa_strength > 0:
 
-                    dlaa_out = self._tiled_forward(
-                        net,
-                        rgb,
-                        tile_size=tile_size,
-                        overlap=32
-                    )
+                    try:
+                        dlaa_out = self._tiled_forward(
+                            net,
+                            rgb,
+                            tile_size=tile_size,
+                            overlap=32
+                        )
+                    except torch.OutOfMemoryError:
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+
+                        logger.warning("[DLAA] OOM detected, retrying with smaller tiles")
+
+                        retry_tile = max(256, tile_size // 2)
+
+                        try:
+                            dlaa_out = self._tiled_forward(
+                                net,
+                                rgb,
+                                tile_size=retry_tile,
+                                overlap=32
+                            )
+                        except torch.OutOfMemoryError:
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+
+                            retry_tile = 256
+                            dlaa_out = self._tiled_forward(
+                                net,
+                                rgb,
+                                tile_size=retry_tile,
+                                overlap=32
+                            )
                     
                     
                     # Global luminance
