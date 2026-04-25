@@ -180,10 +180,10 @@ class VideoTAADLAA:
                 x0_c  = max(0, x1 - tile_size)
 
                 tile         = x[:, :, y0_c:y1, x0_c:x1]
-                refined_tile = torch.clamp(net(tile), 0.0, 1.0)
+                dlaa_out_tile = torch.clamp(net(tile), 0.0, 1.0)
 
 
-                th, tw = refined_tile.shape[2], refined_tile.shape[3]
+                th, tw = dlaa_out_tile.shape[2], dlaa_out_tile.shape[3]
                 w_map  = torch.ones(1, 1, th, tw, device=x.device)
                 ramp   = min(overlap, th // 4, tw // 4)
 
@@ -195,7 +195,7 @@ class VideoTAADLAA:
                         w_map[:, :, :, k]      = torch.clamp(w_map[:, :, :, k],      max=v)
                         w_map[:, :, :, tw-1-k] = torch.clamp(w_map[:, :, :, tw-1-k], max=v)
 
-                out[:, :, y0_c:y1, x0_c:x1]    += refined_tile * w_map
+                out[:, :, y0_c:y1, x0_c:x1]    += dlaa_out_tile * w_map
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
 
                 if x1 == W:
@@ -219,15 +219,23 @@ class VideoTAADLAA:
         grid = F.affine_grid(theta, x.shape, align_corners=False)
         return F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
 
-    def _edge_aa(self, x, thr, blur, net):
-        if blur <= 0:
+    def _edge_aa(self, x, thr, blur_radius, net):
+        if blur_radius <= 0:
             return x
+
         gray = 0.2126*x[:,0:1] + 0.7152*x[:,1:2] + 0.0722*x[:,2:3]
         sx   = F.conv2d(gray, net.sobel_x, padding=1)
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
+
         mask = torch.sigmoid((edge - thr) * 14.0)
-        blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
+
+        blurred = F.avg_pool2d(
+            F.pad(x, [blur_radius]*4, mode="reflect"),
+            blur_radius*2+1,
+            stride=1
+        )
+
         return x*(1.0 - mask) + blurred*mask
 
     def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, sharpen_strength):
@@ -243,7 +251,7 @@ class VideoTAADLAA:
         is_single_image = (B == 1)
 
         if is_single_image:
-            blur_radius   = 0
+            blur_radius = 0
             reset_history = True
         else:
             blur_radius   = 1
@@ -269,10 +277,11 @@ class VideoTAADLAA:
         elif vram_mb <= 16384: tile_size = 1024
         else:                  tile_size = 2048
 
-        # Estimate tile count (analysis)
+        # Estimate tile count 
         if H > tile_size or W > tile_size:
-            step    = tile_size - 64
-            n_tiles = ((H + step - 1) // step) * ((W + step - 1) // step)
+            tile_step = tile_size - 64
+            tile_count = ((H + tile_step - 1) // tile_step) * ((W + tile_step - 1) // tile_step)
+            logger.info(f"[DLAA] Tiled inference: {tile_count} tiles")
         
         with torch.inference_mode():
             for i in range(B):
@@ -294,7 +303,7 @@ class VideoTAADLAA:
                 # DLAA refinement pass
                 if dlaa_strength > 0:
 
-                    refined = self._tiled_forward(
+                    dlaa_out = self._tiled_forward(
                         net,
                         rgb,
                         tile_size=tile_size,
@@ -303,25 +312,25 @@ class VideoTAADLAA:
 
                     
                     # Match global luminance
-                    refined_mean = refined.mean(dim=(1,2,3), keepdim=True)
+                    dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
                     rgb_mean     = rgb.mean(dim=(1,2,3), keepdim=True)
 
-                    refined = refined - refined_mean + rgb_mean
+                    dlaa_out = dlaa_out - dlaa_mean + rgb_mean
                     
-                    # Detail enhancement (high-frequency boost)
-                    luma = 0.299 * refined[:, 0:1] + 0.587 * refined[:, 1:2] + 0.114 * refined[:, 2:3]
-                    blur = F.avg_pool2d(luma, 3, stride=1, padding=1)
-                    detail = (luma - blur)
-                    detail = detail * torch.sigmoid(detail * 10.0)
+                    # Detail enhancement
+                    luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
+                    local_avg = F.avg_pool2d(luma, 3, stride=1, padding=1)
+                    fine_detail = (luma - local_avg)
+                    fine_detail = fine_detail * torch.sigmoid(fine_detail * 10.0)
 
-                    detail_std = F.avg_pool2d(detail.abs(), 7, stride=1, padding=3)
-                    clarity_gain = (0.03 / (detail_std + 1e-6)).clamp(0.1, 0.2)
-                    refined = refined + detail * clarity_gain
+                    local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
+                    detail_gain = (0.03 / (local_detail + 1e-6)).clamp(0.1, 0.2)
+                    dlaa_out = dlaa_out + fine_detail * detail_gain
 
 
-                    # Blend the original image
-                    blend = dlaa_strength * 0.85
-                    rgb = torch.lerp(rgb, refined, blend)
+                    # Blend the original
+                    blend_weight = dlaa_strength * 0.85
+                    rgb = torch.lerp(rgb, dlaa_out, blend_weight)
 
                 # Post-sharpening
                 if sharpen_strength > 0:
