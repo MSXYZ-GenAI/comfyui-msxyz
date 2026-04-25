@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import logging
+from safetensors.torch import load_file
 
 try:
     import comfy.model_management as mm
@@ -166,12 +167,12 @@ class VideoTAADLAA:
             net = DLAANet().to(device)
 
             base_path = os.path.dirname(os.path.realpath(__file__))
-            path      = os.path.join(base_path, "DLAANet.pth")
+            path = os.path.join(base_path, "DLAANet.safetensors")
 
             if not os.path.exists(path):
                 raise FileNotFoundError(f"[DLAA] Model file not found: {path}")
 
-            state_dict = torch.load(path, map_location=device)
+            state_dict = load_file(path, device=str(device))
             net.load_state_dict(state_dict)
             net.eval()
             
