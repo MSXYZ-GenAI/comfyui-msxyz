@@ -294,8 +294,6 @@ class VideoTAADLAA:
                 # DLAA refinement pass
                 if dlaa_strength > 0:
 
-                    tile_size = min(tile_size, 1024)  # hard cap, deterministic
-
                     refined = self._tiled_forward(
                         net,
                         rgb,
