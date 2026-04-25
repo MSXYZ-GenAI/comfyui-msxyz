@@ -378,22 +378,13 @@ class VideoTAADLAA:
 
                     # Base match
                     dlaa_out = dlaa_out - dlaa_mean + rgb_mean
-
-                    # Adaptive gain  (If the model is darkening → the gain increases.)
-                    luma_diff = (rgb_mean - dlaa_mean).abs()
-                    luma_gain = (1.0 + luma_diff * 2.0).clamp(1.0, 1.08)
-
-                    dlaa_out = torch.clamp(dlaa_out * luma_gain, 0.0, 1.0)
                     
-                    # Highlight-safe luma
+                    # Highlight protection
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
-                    darkening = (rgb_mean - dlaa_mean).clamp(min=0.0)
+                    highlight_mask = torch.sigmoid((luma - 0.85) * 12.0)
 
-                    luma_adaptive_gain = (1.0 + darkening * 1.5).clamp(1.0, 1.05)
-                    highlight_mask = torch.sigmoid((luma - 0.7) * 10.0)
-                    luma_adaptive_gain = luma_adaptive_gain * (1.0 - 0.5 * highlight_mask)
-
-                    dlaa_out = torch.clamp(dlaa_out * luma_adaptive_gain, 0.0, 1.0)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * 0.25)
+                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # Detail enhancement
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
@@ -414,6 +405,9 @@ class VideoTAADLAA:
                     detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
 
                     dlaa_out = dlaa_out + fine_detail * detail_gain
+                    
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * 0.15)
+                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
 
 
                     # Blend the original
