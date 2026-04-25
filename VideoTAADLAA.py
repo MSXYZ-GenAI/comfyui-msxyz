@@ -1,12 +1,9 @@
-# ==============================================================
-#  Author      : MSXYZ
-#  Version     : 0.1.1
-#  Description : Video Temporal Anti-Aliasing + DLAA Pipeline
-#  Framework   : PyTorch / ComfyUI Custom Node
-#  License     : MIT
-#
-#  Developed with AI-assisted tooling and optimization workflows
-# ==============================================================
+# Author      : MSXYZ
+# Version     : 0.1.1
+# Description : Video TAA + DLAA Pipeline
+# Features    : Temporal accumulation, DLAA refinement, VRAM-aware tiling
+# Note        : Developed with AI-assisted tooling
+
 
 import torch
 import torch.nn as nn
@@ -19,7 +16,7 @@ try:
 except:
     mm = None
 
-
+logger = logging.getLogger("VideoTAADLAA")
 
 class DLAANet(nn.Module):
     """ Inference (~1M Parameters) """
@@ -102,7 +99,7 @@ class TAAState:
         history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
         diff          = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        motion_mask   = torch.sigmoid((diff - sensitivity) * 15.0)
+        motion_mask   = (diff > sensitivity).float()
         dynamic_alpha = alpha * (1.0 - motion_mask)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
@@ -114,7 +111,7 @@ def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
     if strength < 1e-4:
         return x
     blurred = F.avg_pool2d(F.pad(x, [2, 2, 2, 2], mode="reflect"), 5, stride=1)
-    return torch.clamp(x + (x - blurred) * strength, 0.0, 1.0)
+    return x + (x - blurred) * strength
 
 
 
@@ -153,8 +150,9 @@ class VideoTAADLAA:
             state_dict = torch.load(path, map_location=device)
             net.load_state_dict(state_dict)
             net.eval()
-
+            
             n_params = sum(p.numel() for p in net.parameters())
+            logger.info(f"[DLAA] Model parameters: {n_params/1e6:.2f}M")
 
             self.net_cache[key] = net
 
@@ -162,7 +160,6 @@ class VideoTAADLAA:
 
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
         
-        # Splits x into overlapping tiles to reduce VRAM usage
         B, C, H, W = x.shape
 
         if H <= tile_size and W <= tile_size:
@@ -175,7 +172,7 @@ class VideoTAADLAA:
         y0 = 0
         while y0 < H:
             y1    = min(y0 + tile_size, H)
-            y0_c  = max(0, y1 - tile_size)   # always full size
+            y0_c  = max(0, y1 - tile_size)   # clamp tile start
 
             x0 = 0
             while x0 < W:
@@ -259,7 +256,7 @@ class VideoTAADLAA:
         B, H, W, C = images.shape
         out_list   = []
 
-        # Auto tile size for VRAM
+        # Select tile size based on VRAM
         if mm is not None:
             try:
                 vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
@@ -272,7 +269,7 @@ class VideoTAADLAA:
         elif vram_mb <= 16384: tile_size = 1024
         else:                  tile_size = 2048
 
-        # Log tiling
+        # Estimate tile count (analysis)
         if H > tile_size or W > tile_size:
             step    = tile_size - 64
             n_tiles = ((H + step - 1) // step) * ((W + step - 1) // step)
@@ -282,69 +279,53 @@ class VideoTAADLAA:
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
 
-                # jitter
+                # Subpixel jitter
                 fid = self.taa.frame_id
                 self.taa.frame_id = (fid + 1) % 4
                 rgb = self._jitter(rgb, fid, jitter_scale, net)
 
-                # Edge-based blur
+                # Edge-aware smoothing
                 rgb = self._edge_aa(rgb, edge_threshold, blur_radius, net)
 
-                # TAA accumulation
+                # Temporal accumulation
                 taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
-                # DLAA Neural Pass
+                # DLAA refinement pass
                 if dlaa_strength > 0:
-                    # AI Processing
-                    try:
-                        refined = self._tiled_forward(net, rgb, tile_size=tile_size, overlap=32)
-                    except RuntimeError as OOMRec:
-                        if "out of memory" in str(OOMRec).lower():
-                            print("\033[91m[DLAA] OOM detected, retrying with smaller tiles...\033[0m")
-                            tile_try = tile_size // 2
 
-                            for _ in range(3):
-                                try:
-                                    refined = self._tiled_forward(net, rgb, tile_size=tile_try, overlap=32)
-                                    break # Exit if successful
-                                except RuntimeError as OOMRecInner:
-                                    if "out of memory" in str(OOMRecInner).lower():
-                                        print(f"\033[91m[DLAA] OOM → retry with {tile_try//2}px\033[0m")
-                                        if torch.cuda.is_available():
-                                            torch.cuda.empty_cache()
-                                        tile_try = max(256, tile_try // 2)
-                                    else:
-                                        raise OOMRecInner
-                            else:
-                                raise RuntimeError("DLAA failed even after retries")
-                        else:
-                            raise OOMRec
+                    tile_size = min(tile_size, 1024)  # hard cap, deterministic
+
+                    refined = self._tiled_forward(
+                        net,
+                        rgb,
+                        tile_size=tile_size,
+                        overlap=32
+                    )
 
                     
-                    # Luma
-                    raw_luma = torch.mean(rgb) 
-                    new_luma = torch.mean(refined)
+                    # Match global luminance
+                    refined_mean = refined.mean(dim=(1,2,3), keepdim=True)
+                    rgb_mean     = rgb.mean(dim=(1,2,3), keepdim=True)
 
-                    luma_boost = (raw_luma / (new_luma + 1e-6)).clamp(1.0, 1.25) 
-                    refined = refined * luma_boost
+                    refined = refined - refined_mean + rgb_mean
                     
-                    # Clarity
-                    low_freq = F.avg_pool2d(F.pad(refined, [5, 5, 5, 5], mode="reflect"), 11, stride=1)
-                    details = refined - low_freq
-                    detail_std = torch.std(details)
-                    
-                    auto_clarity_gain = (0.05 / (detail_std + 1e-6)).clamp(0.0, 0.6)
-                    refined = refined + (details * auto_clarity_gain)
+                    # Detail enhancement (high-frequency boost)
+                    blur = F.avg_pool2d(refined, 3, stride=1, padding=1)
+                    edge = refined - blur
+
+                    clarity_gain = 0.2  # sabit, kontrol sende
+                    refined = refined + edge * clarity_gain
 
 
                     # Blend the original image
                     rgb = torch.lerp(rgb, refined, dlaa_strength)
-                    rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 # Post-sharpening
                 if sharpen_strength > 0:
                     rgb = _unsharp_mask(rgb, sharpen_strength)
+                
+                rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
 
