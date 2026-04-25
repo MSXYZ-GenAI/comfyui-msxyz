@@ -15,69 +15,89 @@ try:
     import comfy.model_management as mm
 except:
     mm = None
-
 logger = logging.getLogger("VideoTAADLAA")
 
+
+
 class DLAANet(nn.Module):
-    """ Inference (~1M Parameters) """
+    """ Inference (~2.1M parameters) """
     def __init__(self):
         super().__init__()
+
+        base_channels = 192
+
+        # Precomputed buffers
         self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("jitter_offsets", torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
 
         self.enc1 = nn.Sequential(
-            nn.Conv2d(3, 128, 3, padding=1, bias=False),
-            nn.GroupNorm(16, 128),
+            nn.Conv2d(3, base_channels, 3, padding=1, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
         )
+
         self.enc2 = nn.Sequential(
-            nn.Conv2d(128, 128, 3, padding=1, bias=False),
-            nn.GroupNorm(16, 128),
+            nn.Conv2d(base_channels, base_channels, 3, padding=1, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
         )
-        
+
+        # Multi-scale context aggregation
         self.bottleneck = nn.Sequential(
-            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(16, 128),
+            nn.Conv2d(base_channels, base_channels, 3, padding=1, dilation=1, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 128, 3, padding=4, dilation=4, bias=False),
-            nn.GroupNorm(16, 128),
+
+            nn.Conv2d(base_channels, base_channels, 3, padding=2, dilation=2, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 128, 3, padding=2, dilation=2, bias=False),
-            nn.GroupNorm(16, 128),
+
+            nn.Conv2d(base_channels, base_channels, 3, padding=4, dilation=4, bias=False),
+            nn.GroupNorm(12, base_channels),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(base_channels, base_channels, 3, padding=1, dilation=1, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
         )
-        
+
         self.dec = nn.Sequential(
-            # b(128) + e1(128) = 256 channels input
-            nn.Conv2d(256, 128, 3, padding=1, bias=False),
-            nn.GroupNorm(16, 128),
+            # Skip connection: bottleneck + encoder features
+            nn.Conv2d(base_channels * 2, base_channels, 3, padding=1, bias=False),
+            nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 64, 3, padding=1, bias=False),
+
+            nn.Conv2d(base_channels, 64, 3, padding=1, bias=False),
             nn.GroupNorm(8, 64),
             nn.LeakyReLU(0.2, inplace=True),
         )
-        
+
         self.reconstructor = nn.Conv2d(64, 3, 3, padding=1, bias=False)
         self._init_weights()
 
     def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, nonlinearity='leaky_relu')
-            elif isinstance(m, nn.GroupNorm):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+        for layer in self.modules():
+            if isinstance(layer, nn.Conv2d):
+                nn.init.kaiming_normal_(layer.weight, nonlinearity="leaky_relu")
+            elif isinstance(layer, nn.GroupNorm):
+                nn.init.constant_(layer.weight, 1)
+                nn.init.constant_(layer.bias, 0)
+
         nn.init.zeros_(self.reconstructor.weight)
 
     def forward(self, x):
-        e1 = self.enc1(x)
-        e2 = self.enc2(e1)
-        b = self.bottleneck(e2)
-        d = self.dec(torch.cat([b, e1], dim=1))
-        r = self.reconstructor(d)
-        return x + r
+        input_img = x
+
+        feat_low  = self.enc1(input_img)
+        feat_high = self.enc2(feat_low)
+
+        context = self.bottleneck(feat_high)
+
+        decoded = self.dec(torch.cat([context, feat_low], dim=1))
+        residual = self.reconstructor(decoded)
+
+        return input_img + residual
 
 
 class TAAState:
@@ -98,9 +118,13 @@ class TAAState:
         local_max =  F.max_pool2d( frame, kernel_size=3, stride=1, padding=1)
         history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
-        diff          = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
-        motion_mask   = (diff > sensitivity).float()
-        dynamic_alpha = alpha * (1.0 - motion_mask)
+        diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
+
+        motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
+        dynamic_alpha = alpha * (1.0 - motion_soft)
+
+        reject_mask = (diff > sensitivity * 2.5).float()
+        history_clipped = torch.lerp(history_clipped, frame, reject_mask)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
         self.history = out.detach()
