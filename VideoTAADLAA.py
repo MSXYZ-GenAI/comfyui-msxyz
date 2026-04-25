@@ -226,7 +226,7 @@ class VideoTAADLAA:
         sx   = F.conv2d(gray, net.sobel_x, padding=1)
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
-        mask = torch.sigmoid((edge - thr) * 8.0)
+        mask = torch.sigmoid((edge - thr) * 14.0)
         blurred = F.avg_pool2d(F.pad(x, [blur]*4, mode="reflect"), blur*2+1, stride=1)
         return x*(1.0 - mask) + blurred*mask
 
@@ -311,15 +311,19 @@ class VideoTAADLAA:
                     refined = refined - refined_mean + rgb_mean
                     
                     # Detail enhancement (high-frequency boost)
-                    blur = F.avg_pool2d(refined, 3, stride=1, padding=1)
-                    edge = refined - blur
+                    luma = 0.299 * refined[:, 0:1] + 0.587 * refined[:, 1:2] + 0.114 * refined[:, 2:3]
+                    blur = F.avg_pool2d(luma, 3, stride=1, padding=1)
+                    detail = (luma - blur)
+                    detail = detail * torch.sigmoid(detail * 10.0)
 
-                    clarity_gain = 0.2
-                    refined = refined + edge * clarity_gain
+                    detail_std = F.avg_pool2d(detail.abs(), 7, stride=1, padding=3)
+                    clarity_gain = (0.03 / (detail_std + 1e-6)).clamp(0.1, 0.2)
+                    refined = refined + detail * clarity_gain
 
 
                     # Blend the original image
-                    rgb = torch.lerp(rgb, refined, dlaa_strength)
+                    blend = dlaa_strength * 0.85
+                    rgb = torch.lerp(rgb, refined, blend)
 
                 # Post-sharpening
                 if sharpen_strength > 0:
