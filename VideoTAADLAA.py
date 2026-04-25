@@ -295,6 +295,10 @@ class VideoTAADLAA:
         detail_min_gain   = 0.10
         detail_max_gain   = 0.26
         
+        edge_sharp_threshold = 0.08
+        edge_sharp_slope     = 12.0
+        edge_sharp_strength  = 0.12
+        
         B, H, W, C = images.shape
         is_single_image = (B == 1)
 
@@ -419,6 +423,14 @@ class VideoTAADLAA:
                     detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
 
                     dlaa_out = dlaa_out + fine_detail * detail_gain
+                    
+                    # Edge-aware sharpening
+                    edge = torch.sqrt(F.conv2d(luma, net.sobel_x, padding=1) ** 2 + F.conv2d(luma, net.sobel_y, padding=1) ** 2 + 1e-6)
+
+                    edge_mask = torch.sigmoid((edge - edge_sharp_threshold) * edge_sharp_slope)
+                    edge_detail = fine_detail * edge_mask
+
+                    dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
                     
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
