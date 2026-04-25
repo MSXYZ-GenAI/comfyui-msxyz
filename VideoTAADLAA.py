@@ -122,10 +122,14 @@ class TAAState:
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
 
         motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
+        motion_soft = motion_soft * motion_soft * (3.0 - 2.0 * motion_soft)
+
         dynamic_alpha = alpha * (1.0 - motion_soft)
 
-        reject_mask = (diff > sensitivity * 2.5).float()
-        history_clipped = torch.lerp(history_clipped, frame, reject_mask)
+        reject_strength = ((diff - sensitivity * 1.5) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
+        reject_strength = reject_strength * reject_strength * (3.0 - 2.0 * reject_strength)
+
+        history_clipped = torch.lerp(history_clipped, frame, reject_strength)
 
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
         self.history = out.detach()
@@ -154,6 +158,8 @@ class VideoTAADLAA:
                 "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
                 "sharpen_strength"  : ("FLOAT", {"default": 0.15, "min": 0, "max": 2, "step": 0.05}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
+                "tone_strength"     : ("FLOAT", {"default": 0.15, "min": 0.0, "max": 0.3, "step": 0.01}),
+                "edge_sharp_strength": ("FLOAT", {"default": 0.12, "min": 0.05, "max": 0.2, "step": 0.01}),
             }
         }
 
@@ -272,32 +278,31 @@ class VideoTAADLAA:
 
         return x*(1.0 - mask) + blurred*mask
 
-    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, sharpen_strength):
+    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, sharpen_strength, tone_strength, edge_sharp_strength):
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        
+        # Adaptive
         taa_alpha      = 0.10
         jitter_scale   = 0.20
         edge_threshold = 0.15
-        
-        highlight_threshold  = 0.85
-        highlight_slope      = 12.0
+        dlaa_blend_scale = 0.85
+        tone_curve_bias   = 0.6
         highlight_pre_blend  = 0.15
         highlight_post_blend = 0.08
-        
-        dlaa_blend_scale = 0.85
-
+        highlight_threshold  = 0.85
+        highlight_slope      = 12.0
         detail_base_scale = 9.0
         detail_ref_scale  = 0.02
         detail_min_scale  = 6.0
         detail_max_scale  = 12.0
         detail_min_gain   = 0.10
         detail_max_gain   = 0.26
-        
         edge_sharp_threshold = 0.08
         edge_sharp_slope     = 12.0
-        edge_sharp_strength  = 0.12
+        
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
@@ -428,12 +433,17 @@ class VideoTAADLAA:
                     edge = torch.sqrt(F.conv2d(luma, net.sobel_x, padding=1) ** 2 + F.conv2d(luma, net.sobel_y, padding=1) ** 2 + 1e-6)
 
                     edge_mask = torch.sigmoid((edge - edge_sharp_threshold) * edge_sharp_slope)
-                    edge_detail = fine_detail * edge_mask
+                    edge_detail = fine_detail * edge_mask * (1.0 - highlight_mask)
 
                     dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
                     
+                    # Soft highlight compression
+                    tone_mapped = dlaa_out / (dlaa_out + tone_curve_bias)
+                    dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
+                    
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
+                    
 
 
                     # Blend the original
