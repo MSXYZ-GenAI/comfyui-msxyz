@@ -167,12 +167,21 @@ class VideoTAADLAA:
             net = DLAANet().to(device)
 
             base_path = os.path.dirname(os.path.realpath(__file__))
-            path = os.path.join(base_path, "DLAANet.safetensors")
 
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"[DLAA] Model file not found: {path}")
+            safetensors_path = os.path.join(base_path, "DLAANet.safetensors")
+            pth_path         = os.path.join(base_path, "DLAANet.pth")
 
-            state_dict = load_file(path, device=str(device))
+            if os.path.exists(safetensors_path):
+                state_dict = load_file(safetensors_path, device=str(device))
+                logger.info("[DLAA] Loaded safetensors model")
+            elif os.path.exists(pth_path):
+                state_dict = torch.load(pth_path, map_location=device)
+                logger.info("[DLAA] Loaded legacy .pth model")
+            else:
+                raise FileNotFoundError(
+                    f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
+                )
+
             net.load_state_dict(state_dict)
             net.eval()
             
