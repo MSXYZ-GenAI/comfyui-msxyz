@@ -314,7 +314,7 @@ class VideoTAADLAA:
                     blur = F.avg_pool2d(refined, 3, stride=1, padding=1)
                     edge = refined - blur
 
-                    clarity_gain = 0.2  # sabit, kontrol sende
+                    clarity_gain = 0.2
                     refined = refined + edge * clarity_gain
 
 
