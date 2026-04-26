@@ -410,10 +410,18 @@ class VideoTAADLAA:
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
 
-                # Subpixel jitter
+                # Adaptive subpixel jitter
                 fid = self.taa.frame_id
                 self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
-                rgb = self._jitter(rgb, fid, self.jitter_scale, net)
+
+                adaptive_jitter_scale = self.jitter_scale
+
+                if self.taa.history is not None and self.taa.history.shape == rgb.shape:
+                    motion_estimate = torch.abs(rgb - self.taa.history).mean()
+                    jitter_damping = (1.0 - motion_estimate * 8.0).clamp(0.45, 1.0)
+                    adaptive_jitter_scale = self.jitter_scale * jitter_damping
+
+                rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
 
                 # Edge-aware smoothing
                 rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
