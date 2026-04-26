@@ -1,9 +1,21 @@
-# Video TAA + DLAA
-# v0.1.0
-# AI-assisted implementation
+# Video Adaptive Anti-aliasing
+# 0.1.2
+# AI-assisted
+
+
+import os
+import logging
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+from safetensors.torch import load_file
+
+try:
+    import comfy.model_management as mm
+except ImportError:
+    mm = None
+logger = logging.getLogger("VideoAdaptiveAA")
 
 class VideoAdaptiveAA:
     def __init__(self):
