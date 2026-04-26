@@ -246,7 +246,7 @@ class VideoTAADLAA:
                 "edge_sharp_strength": ("FLOAT", {"default": 0.14, "min": 0.05, "max": 0.2, "step": 0.01}),
             }
         }
-
+        
     RETURN_TYPES = ("IMAGE",)
     FUNCTION     = "execute"
     CATEGORY     = "CustomPostProcess"
