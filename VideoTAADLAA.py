@@ -1,7 +1,7 @@
 # Author      : MSXYZ
-# Version     : 0.1.1
+# Version     : 0.1.2
 # Description : Video TAA + DLAA Pipeline
-# Features    : Temporal accumulation, DLAA refinement, VRAM-aware tiling
+# Features    : Temporal accumulation, DLAA refinement, VRAM-aware tiling, preset system (Auto/Balanced/Sharp/Cinematic), adaptive jitter
 # Note        : Developed with AI-assisted tooling
 
 
@@ -17,7 +17,6 @@ try:
 except:
     mm = None
 logger = logging.getLogger("VideoTAADLAA")
-
 
 
 class DLAANet(nn.Module):
@@ -180,7 +179,13 @@ class TAAState:
         motion_soft = motion_soft * motion_soft * (3.0 - 2.0 * motion_soft)
 
         dynamic_alpha = alpha * (1.0 - motion_soft) * edge_guard
-
+        
+        confidence = torch.exp(-diff * 10.0)
+        confidence = confidence * (1.0 - disocclusion)
+        confidence = confidence.clamp(0.15, 1.0)
+        
+        dynamic_alpha = dynamic_alpha * confidence
+        
         reject_strength = ((diff - sensitivity * 1.5) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
         reject_strength = torch.maximum(reject_strength, disocclusion)
         reject_strength = reject_strength * reject_strength * (3.0 - 2.0 * reject_strength)
@@ -190,16 +195,8 @@ class TAAState:
         out = torch.lerp(frame, history_clipped, dynamic_alpha)
         self.history = out.detach()
         return out
-
-
-def _unsharp_mask(x: torch.Tensor, strength: float) -> torch.Tensor:
-    if strength < 1e-4:
-        return x
-    blurred = F.avg_pool2d(F.pad(x, [2, 2, 2, 2], mode="reflect"), 5, stride=1)
-    return x + (x - blurred) * strength
-
-
-
+        
+        
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
@@ -239,11 +236,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images"            : ("IMAGE",),
-                "taa_strength"      : ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
-                "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
-                "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
-                "tone_strength"     : ("FLOAT", {"default": 0.12, "min": 0.0, "max": 0.3, "step": 0.01}),
-                "edge_sharp_strength": ("FLOAT", {"default": 0.14, "min": 0.05, "max": 0.2, "step": 0.01}),
+                "preset": (["Auto", "Balanced", "Sharp", "Cinematic"],),
             }
         }
         
@@ -365,11 +358,46 @@ class VideoTAADLAA:
 
         return x*(1.0 - mask) + blurred*mask
 
-    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, tone_strength, edge_sharp_strength):
+    def execute(self, images, preset):
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                 
+        
+        preset_jitter_scale = self.jitter_scale
+        
+        if preset == "Balanced":
+            taa_strength = 0.45
+            dlaa_strength = 0.65
+            tone_strength = 0.12
+            edge_sharp_strength = 0.14
+            motion_sensitivity = 0.08
+            preset_jitter_scale = 0.20
+
+        elif preset == "Sharp":
+            taa_strength = 0.35
+            dlaa_strength = 0.95
+            tone_strength = 0.12
+            edge_sharp_strength = 0.18
+            motion_sensitivity = 0.07
+            preset_jitter_scale = 0.15
+
+        elif preset == "Cinematic":
+            taa_strength = 0.65
+            dlaa_strength = 0.65
+            tone_strength = 0.16
+            edge_sharp_strength = 0.08
+            motion_sensitivity = 0.10
+            preset_jitter_scale = 0.25
+            
+        else:
+            # safety fallback
+            taa_strength = 0.45
+            dlaa_strength = 0.65
+            tone_strength = 0.12
+            edge_sharp_strength = 0.14
+            motion_sensitivity = 0.08
+            preset_jitter_scale = 0.20
+        
         B, H, W, C = images.shape
         is_single_image = (B == 1)
 
@@ -409,17 +437,47 @@ class VideoTAADLAA:
             for i in range(B):
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
+                
+                if preset == "Auto":
+                    if self.taa.history is not None and self.taa.history.shape == rgb.shape:
+                        scene_motion = torch.abs(rgb - self.taa.history).mean().item()
+                    else:
+                        scene_motion = 0.02
 
+                    if scene_motion < 0.015:
+                        taa_strength = 0.35
+                        dlaa_strength = 0.70
+                        tone_strength = 0.10
+                        edge_sharp_strength = 0.18
+                        motion_sensitivity = 0.07
+                        preset_jitter_scale = 0.15
+
+                    elif scene_motion < 0.045:
+                        taa_strength = 0.45
+                        dlaa_strength = 0.65
+                        tone_strength = 0.12
+                        edge_sharp_strength = 0.14
+                        motion_sensitivity = 0.08
+                        preset_jitter_scale = 0.20
+
+                    else:
+                        taa_strength = 0.60
+                        dlaa_strength = 0.60
+                        tone_strength = 0.16
+                        edge_sharp_strength = 0.08
+                        motion_sensitivity = 0.10
+                        preset_jitter_scale = 0.25
+                
                 # Adaptive subpixel jitter
                 fid = self.taa.frame_id
                 self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
 
-                adaptive_jitter_scale = self.jitter_scale
+                adaptive_jitter_scale = preset_jitter_scale
 
                 if self.taa.history is not None and self.taa.history.shape == rgb.shape:
                     motion_estimate = torch.abs(rgb - self.taa.history).mean()
                     jitter_damping = (1.0 - motion_estimate * 8.0).clamp(0.45, 1.0)
-                    adaptive_jitter_scale = self.jitter_scale * jitter_damping
+                    adaptive_jitter_scale = preset_jitter_scale * jitter_damping
 
                 rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
 
@@ -511,11 +569,9 @@ class VideoTAADLAA:
                     detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
                     detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
                     
-                    edge = edge_for_detail
-                    
                     dlaa_out = dlaa_out + fine_detail_rgb * detail_gain
                     
-                    edge_mask = torch.sigmoid((edge - self.edge_sharp_threshold) * self.edge_sharp_slope)
+                    edge_mask = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
                     edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
                     dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
