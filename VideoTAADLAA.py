@@ -448,6 +448,7 @@ class VideoTAADLAA:
             detail_boost = 1.00
             edge_boost = 1.00
             temporal_strength = 0.35
+            micro_limit = 0.04
             motion_threshold = 0.08
             taa_strength = 0.45
             dlaa_strength = 0.65
@@ -509,6 +510,7 @@ class VideoTAADLAA:
                         detail_boost = 1.12
                         edge_boost = 1.15
                         temporal_strength = 0.28
+                        micro_limit = 0.045
                         motion_threshold = 0.07
                         taa_strength = 0.35
                         dlaa_strength = 0.70
@@ -521,6 +523,7 @@ class VideoTAADLAA:
                         detail_boost = 1.00
                         edge_boost = 1.00
                         temporal_strength = 0.35
+                        micro_limit = 0.04
                         motion_threshold = 0.08
                         taa_strength = 0.45
                         dlaa_strength = 0.65
@@ -533,6 +536,7 @@ class VideoTAADLAA:
                         detail_boost = 0.85
                         edge_boost = 0.75
                         temporal_strength = 0.42
+                        micro_limit = 0.025
                         motion_threshold = 0.10
                         taa_strength = 0.60
                         dlaa_strength = 0.60
