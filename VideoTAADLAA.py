@@ -1,8 +1,11 @@
-# Author      : MSXYZ
-# Version     : 0.1.2
-# Description : Video TAA + DLAA Pipeline
-# Features    : Temporal accumulation, DLAA refinement, VRAM-aware tiling, preset system (Auto/Balanced/Sharp/Cinematic), adaptive jitter
-# Note        : Developed with AI-assisted tooling
+# Video TAA + DLAA pipeline (AI-assisted)
+# v0.1.2
+#
+# - temporal accumulation (TAA)
+# - DLAA refinement pass
+# - VRAM-aware tiling
+# - preset modes (Auto / Balanced / Sharp / Cinematic)
+# - adaptive jitter
 
 
 import torch
@@ -26,9 +29,11 @@ class DLAANet(nn.Module):
 
         base_channels = 192
 
-        # Precomputed buffers
+        # edge filters (Sobel)
         self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
+        
+        # quasi-random subpixel offsets
         self.register_buffer(
             "jitter_offsets",
             torch.tensor([
@@ -63,7 +68,7 @@ class DLAANet(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
         )
 
-        # Multi-scale context aggregation
+        # simple multi-scale context
         self.bottleneck = nn.Sequential(
             nn.Conv2d(base_channels, base_channels, 3, padding=1, dilation=1, bias=False),
             nn.GroupNorm(12, base_channels),
@@ -83,7 +88,7 @@ class DLAANet(nn.Module):
         )
 
         self.dec = nn.Sequential(
-            # Skip connection: bottleneck + encoder features
+            # skip connection
             nn.Conv2d(base_channels * 2, base_channels, 3, padding=1, bias=False),
             nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
@@ -121,6 +126,7 @@ class DLAANet(nn.Module):
 
 
 class TAAState:
+    # lightweight temporal AA state
     def __init__(self,
         variance_gamma=1.5,
         edge_guard_strength=2.0,
@@ -138,6 +144,10 @@ class TAAState:
     def reset(self):
         self.history  = None
         self.frame_id = 0
+        
+    @staticmethod
+    def smoothstep(x: torch.Tensor) -> torch.Tensor:
+        return x * x * (3.0 - 2.0 * x)
 
     def update(self, frame, alpha, sensitivity):
         if self.history is None or self.history.shape != frame.shape:
@@ -156,11 +166,11 @@ class TAAState:
 
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         
-        # Disocclusion estimate
+        # detect disocclusion
         raw_diff = torch.abs(frame - self.history).mean(dim=1, keepdim=True)
 
         disocclusion = ((raw_diff - sensitivity * 2.0) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
-        disocclusion = disocclusion * disocclusion * (3.0 - 2.0 * disocclusion)
+        disocclusion    = self.smoothstep(disocclusion)
         
         gray = 0.299 * frame[:, 0:1] + 0.587 * frame[:, 1:2] + 0.114 * frame[:, 2:3]
 
@@ -176,7 +186,7 @@ class TAAState:
         ).clamp(self.edge_guard_min, self.edge_guard_max)
 
         motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
-        motion_soft = motion_soft * motion_soft * (3.0 - 2.0 * motion_soft)
+        motion_soft     = self.smoothstep(motion_soft)
 
         dynamic_alpha = alpha * (1.0 - motion_soft) * edge_guard
         
@@ -188,7 +198,7 @@ class TAAState:
         
         reject_strength = ((diff - sensitivity * 1.5) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
         reject_strength = torch.maximum(reject_strength, disocclusion)
-        reject_strength = reject_strength * reject_strength * (3.0 - 2.0 * reject_strength)
+        reject_strength = self.smoothstep(reject_strength)
 
         history_clipped = torch.lerp(history_clipped, frame, reject_strength)
 
@@ -484,7 +494,7 @@ class VideoTAADLAA:
                 # Edge-aware smoothing
                 rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
 
-                # Temporal accumulation
+                # TAA blend
                 taa_out = self.taa.update(rgb, self.taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
@@ -540,14 +550,14 @@ class VideoTAADLAA:
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
-                    # Detail enhancement
+                    # detail boost
                     local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
                     fine_detail_rgb = dlaa_out - local_avg_rgb
 
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
                     fine_detail = 0.299 * fine_detail_rgb[:, 0:1] + 0.587 * fine_detail_rgb[:, 1:2] + 0.114 * fine_detail_rgb[:, 2:3]
 
-                    # Adaptive detail shaping
+                    # adaptive detail
                     detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
                     detail_scale = (self.detail_base_scale + (self.detail_ref_scale / (detail_strength + 1e-6))).clamp(self.detail_min_scale, self.detail_max_scale)
 
@@ -576,7 +586,7 @@ class VideoTAADLAA:
 
                     dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
                     
-                    # Soft highlight compression
+                    # tone compression (highlights)
                     tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
                     dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
                     
