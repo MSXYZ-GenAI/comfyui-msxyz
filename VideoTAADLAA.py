@@ -1,13 +1,14 @@
 # Video TAA + DLAA
-# v0.1.2
-# AI-assisted implementation
+# v0.3.2
+# AI-assisted
 
+
+import os
+import logging
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import os
-import logging
 from safetensors.torch import load_file
 
 try:
@@ -24,11 +25,11 @@ class DLAANet(nn.Module):
 
         base_channels = 192
 
-        # Sobel kernels
+        # Sobel
         self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
         
-        # subpixel offsets
+        # subpixel
         self.register_buffer(
             "jitter_offsets",
             torch.tensor([
@@ -63,7 +64,6 @@ class DLAANet(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
         )
 
-        # multi-scale context
         self.bottleneck = nn.Sequential(
             nn.Conv2d(base_channels, base_channels, 3, padding=1, dilation=1, bias=False),
             nn.GroupNorm(12, base_channels),
@@ -83,7 +83,6 @@ class DLAANet(nn.Module):
         )
 
         self.dec = nn.Sequential(
-            # skip connection
             nn.Conv2d(base_channels * 2, base_channels, 3, padding=1, bias=False),
             nn.GroupNorm(12, base_channels),
             nn.LeakyReLU(0.2, inplace=True),
@@ -121,7 +120,6 @@ class DLAANet(nn.Module):
 
 
 class TAAState:
-    # TAA state
     def __init__(self,
         variance_gamma=1.5,
         edge_guard_strength=2.0,
@@ -161,7 +159,6 @@ class TAAState:
 
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
         
-        # detect disocclusion
         raw_diff = torch.abs(frame - self.history).mean(dim=1, keepdim=True)
 
         disocclusion = ((raw_diff - sensitivity * 2.0) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
@@ -217,7 +214,7 @@ class VideoTAADLAA:
         # DLAA blend
         self.dlaa_blend_scale = 1.00
 
-        # Highlight / tone
+        # Highlight
         self.tone_curve_bias      = 0.6
         self.highlight_pre_blend  = 0.15
         self.highlight_post_blend = 0.08
@@ -237,6 +234,11 @@ class VideoTAADLAA:
         # Edge sharpening
         self.edge_sharp_threshold = 0.08
         self.edge_sharp_slope     = 12.0
+        
+        # Luma
+        self.luma_boost_base        = 0.03
+        self.saturation_boost_base  = 0.06
+        self.luma_highlight_protect = 0.6
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -299,7 +301,7 @@ class VideoTAADLAA:
         y0 = 0
         while y0 < H:
             y1    = min(y0 + tile_size, H)
-            y0_c  = max(0, y1 - tile_size)   # clamp tile start
+            y0_c  = max(0, y1 - tile_size)
 
             x0 = 0
             while x0 < W:
@@ -410,6 +412,8 @@ class VideoTAADLAA:
             edge_boost = 1.00
             temporal_strength = 0.35
             micro_limit = 0.04
+            luma_boost_mult = 1.0
+            saturation_boost_mult = 1.0
             motion_threshold = 0.08
             taa_strength = 0.45
             dlaa_strength = 0.65
@@ -424,6 +428,8 @@ class VideoTAADLAA:
             temporal_strength = 0.22
             motion_threshold = 0.06
             micro_limit = 0.05
+            luma_boost_mult = 1.2
+            saturation_boost_mult = 1.1
             taa_strength = 0.35
             dlaa_strength = 1.00
             tone_strength = 0.12
@@ -436,6 +442,8 @@ class VideoTAADLAA:
             edge_boost = 0.75
             temporal_strength = 0.45
             micro_limit = 0.025
+            luma_boost_mult = 0.8
+            saturation_boost_mult = 0.7
             motion_threshold = 0.10
             taa_strength = 0.65
             dlaa_strength = 0.65
@@ -449,6 +457,8 @@ class VideoTAADLAA:
             edge_boost = 1.00
             temporal_strength = 0.35
             micro_limit = 0.04
+            luma_boost_mult = 1.0
+            saturation_boost_mult = 1.0
             motion_threshold = 0.08
             taa_strength = 0.45
             dlaa_strength = 0.65
@@ -511,6 +521,8 @@ class VideoTAADLAA:
                         edge_boost = 1.15
                         temporal_strength = 0.28
                         micro_limit = 0.045
+                        luma_boost_mult = 1.15
+                        saturation_boost_mult = 1.05
                         motion_threshold = 0.07
                         taa_strength = 0.35
                         dlaa_strength = 0.70
@@ -524,6 +536,8 @@ class VideoTAADLAA:
                         edge_boost = 1.00
                         temporal_strength = 0.35
                         micro_limit = 0.04
+                        luma_boost_mult = 1.0
+                        saturation_boost_mult = 1.0
                         motion_threshold = 0.08
                         taa_strength = 0.45
                         dlaa_strength = 0.65
@@ -537,6 +551,8 @@ class VideoTAADLAA:
                         edge_boost = 0.75
                         temporal_strength = 0.42
                         micro_limit = 0.025
+                        luma_boost_mult = 0.85
+                        saturation_boost_mult = 0.75
                         motion_threshold = 0.10
                         taa_strength = 0.60
                         dlaa_strength = 0.60
@@ -581,7 +597,7 @@ class VideoTAADLAA:
                         if torch.cuda.is_available():
                             torch.cuda.empty_cache()
 
-                        logger.warning("[DLAA] OOM detected, retrying with smaller tiles")
+                        logger.warning("Retrying DLAA with smaller tiles")
 
                         retry_tile = max(256, tile_size // 2)
 
@@ -608,8 +624,6 @@ class VideoTAADLAA:
                     # luminance match
                     dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
                     rgb_mean  = rgb.mean(dim=(1,2,3), keepdim=True)
-
-                    # highlights
 
                     dlaa_out = dlaa_out - dlaa_mean + rgb_mean
                     
@@ -643,7 +657,7 @@ class VideoTAADLAA:
 
                     fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
                     
-                    # micro-detail
+
                     fine_detail = fine_detail.clamp(-0.08, 0.08)
 
                     local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
@@ -677,6 +691,16 @@ class VideoTAADLAA:
                     tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
                     dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
                     
+                    # luma lift
+                    luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
+                    luma_boost = self.luma_boost_base * luma_boost_mult * (1.0 - highlight_mask * self.luma_highlight_protect)
+                    dlaa_out = dlaa_out * (1.0 + luma_boost)
+                    
+
+                    mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
+                    saturation_boost = self.saturation_boost_base * saturation_boost_mult * (1.0 - highlight_mask * 0.5)
+                    dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
+                    
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
 
@@ -697,7 +721,6 @@ class VideoTAADLAA:
                     
 
 
-                    # final blend
                     blend_weight = dlaa_strength * self.dlaa_blend_scale
 
                     if preset in ["Detail"]:
