@@ -38,9 +38,9 @@ class VideoAdaptiveAA:
             img_rgb = img
 
         img_gray = (
-            0.2 * img_rgb[:, 0:1, :, :]
-            + 0.7 * img_rgb[:, 1:2, :, :]
-            + 0.1 * img_rgb[:, 2:3, :, :]
+            0.2126 * img_rgb[:, 0:1, :, :]
+            + 0.7152 * img_rgb[:, 1:2, :, :]
+            + 0.0722 * img_rgb[:, 2:3, :, :]
         )
         
         get_sobel_x = torch.tensor(
