@@ -621,9 +621,14 @@ class VideoTAADLAA:
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # motion detail suppression
-                    detail_boost *= (1.0 - motion_gate * 0.20)
-                    edge_boost *= (1.0 - motion_gate * 0.15)
-                    micro_limit *= (1.0 - motion_gate * 0.20)
+                    if preset in ["Detail"]:
+                        detail_boost *= (1.0 - motion_gate * 0.15)
+                        edge_boost *= (1.0 - motion_gate * 0.05)
+                        micro_limit *= (1.0 - motion_gate * 0.12)
+                    else:
+                        detail_boost *= (1.0 - motion_gate * 0.20)
+                        edge_boost *= (1.0 - motion_gate * 0.15)
+                        micro_limit *= (1.0 - motion_gate * 0.20)
                     
                     # gain
                     local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
