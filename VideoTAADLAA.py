@@ -30,7 +30,27 @@ class DLAANet(nn.Module):
         # Precomputed buffers
         self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
-        self.register_buffer("jitter_offsets", torch.tensor([[0.25,0.25],[-0.25,-0.25],[-0.25,0.25],[0.25,-0.25]], dtype=torch.float32))
+        self.register_buffer(
+            "jitter_offsets",
+            torch.tensor([
+                [ 0.0000, -0.1667],
+                [-0.2500,  0.1667],
+                [ 0.2500, -0.3889],
+                [-0.3750, -0.0556],
+                [ 0.1250,  0.2778],
+                [-0.1250, -0.2778],
+                [ 0.3750,  0.0556],
+                [-0.4375,  0.3889],
+                [ 0.0625, -0.4630],
+                [-0.3125,  0.1296],
+                [ 0.1875, -0.2963],
+                [-0.4375, -0.0370],
+                [ 0.3125,  0.2407],
+                [-0.0625, -0.2037],
+                [ 0.4375,  0.0185],
+                [-0.4688,  0.3148],
+            ], dtype=torch.float32)
+        )
 
         self.enc1 = nn.Sequential(
             nn.Conv2d(3, base_channels, 3, padding=1, bias=False),
@@ -114,19 +134,49 @@ class TAAState:
         if self.history is None or self.history.shape != frame.shape:
             self.history = frame.detach().clone().to(frame.device)
             return frame
+        
+        # Adaptive
+        edge_guard_strength = 2.0
+        edge_guard_min      = 0.25
+        edge_guard_max      = 1.0
 
-        local_min = -F.max_pool2d(-frame, kernel_size=3, stride=1, padding=1)
-        local_max =  F.max_pool2d( frame, kernel_size=3, stride=1, padding=1)
+        local_mean = F.avg_pool2d(frame, kernel_size=3, stride=1, padding=1)
+        local_sq_mean = F.avg_pool2d(frame * frame, kernel_size=3, stride=1, padding=1)
+        local_var = (local_sq_mean - local_mean * local_mean).clamp(min=0.0)
+        local_std = torch.sqrt(local_var + 1e-6)
+
+        variance_gamma = 1.5
+        local_min = local_mean - local_std * variance_gamma
+        local_max = local_mean + local_std * variance_gamma
+
         history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
         diff = torch.abs(frame - history_clipped).mean(dim=1, keepdim=True)
+        
+        # Disocclusion estimate
+        raw_diff = torch.abs(frame - self.history).mean(dim=1, keepdim=True)
+
+        disocclusion = ((raw_diff - sensitivity * 2.0) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
+        disocclusion = disocclusion * disocclusion * (3.0 - 2.0 * disocclusion)
+        
+        gray = 0.299 * frame[:, 0:1] + 0.587 * frame[:, 1:2] + 0.114 * frame[:, 2:3]
+
+        edge_x = torch.abs(gray[:, :, :, 1:] - gray[:, :, :, :-1])
+        edge_y = torch.abs(gray[:, :, 1:, :] - gray[:, :, :-1, :])
+
+        edge_x = F.pad(edge_x, (0, 1, 0, 0))
+        edge_y = F.pad(edge_y, (0, 0, 0, 1))
+
+        edge_strength = (edge_x + edge_y).clamp(0.0, 1.0)
+        edge_guard = (edge_guard_max - edge_strength * edge_guard_strength).clamp(edge_guard_min, edge_guard_max)
 
         motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
         motion_soft = motion_soft * motion_soft * (3.0 - 2.0 * motion_soft)
 
-        dynamic_alpha = alpha * (1.0 - motion_soft)
+        dynamic_alpha = alpha * (1.0 - motion_soft) * edge_guard
 
         reject_strength = ((diff - sensitivity * 1.5) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
+        reject_strength = torch.maximum(reject_strength, disocclusion)
         reject_strength = reject_strength * reject_strength * (3.0 - 2.0 * reject_strength)
 
         history_clipped = torch.lerp(history_clipped, frame, reject_strength)
@@ -156,10 +206,9 @@ class VideoTAADLAA:
                 "images"            : ("IMAGE",),
                 "taa_strength"      : ("FLOAT", {"default": 0.45, "min": 0, "max": 1, "step": 0.05}),
                 "dlaa_strength"     : ("FLOAT", {"default": 0.65, "min": 0, "max": 1, "step": 0.05}),
-                "sharpen_strength"  : ("FLOAT", {"default": 0.15, "min": 0, "max": 2, "step": 0.05}),
                 "motion_sensitivity": ("FLOAT", {"default": 0.08, "min": 0, "max": 0.3, "step": 0.01}),
-                "tone_strength"     : ("FLOAT", {"default": 0.15, "min": 0.0, "max": 0.3, "step": 0.01}),
-                "edge_sharp_strength": ("FLOAT", {"default": 0.12, "min": 0.05, "max": 0.2, "step": 0.01}),
+                "tone_strength"     : ("FLOAT", {"default": 0.12, "min": 0.0, "max": 0.3, "step": 0.01}),
+                "edge_sharp_strength": ("FLOAT", {"default": 0.14, "min": 0.05, "max": 0.2, "step": 0.01}),
             }
         }
 
@@ -187,8 +236,11 @@ class VideoTAADLAA:
                 raise FileNotFoundError(
                     f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
                 )
+            
+            if "jitter_offsets" in state_dict:
+                del state_dict["jitter_offsets"]
 
-            net.load_state_dict(state_dict)
+            net.load_state_dict(state_dict, strict=False)
             net.eval()
             
             n_params = sum(p.numel() for p in net.parameters())
@@ -251,7 +303,7 @@ class VideoTAADLAA:
     def _jitter(self, x, idx, scale, net):
         if scale < 1e-5:
             return x
-        off  = net.jitter_offsets[idx % 4]
+        off = net.jitter_offsets[idx % net.jitter_offsets.shape[0]]
         B, C, H, W = x.shape
         theta = torch.eye(2, 3, device=x.device).unsqueeze(0).repeat(B, 1, 1)
         theta[:, 0, 2] = off[0] * scale / W
@@ -278,7 +330,7 @@ class VideoTAADLAA:
 
         return x*(1.0 - mask) + blurred*mask
 
-    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, sharpen_strength, tone_strength, edge_sharp_strength):
+    def execute(self, images, taa_strength, motion_sensitivity, dlaa_strength, tone_strength, edge_sharp_strength):
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -300,6 +352,8 @@ class VideoTAADLAA:
         detail_max_scale  = 12.0
         detail_min_gain   = 0.10
         detail_max_gain   = 0.26
+        detail_edge_boost = 0.35
+        detail_highlight_suppression = 0.5
         edge_sharp_threshold = 0.08
         edge_sharp_slope     = 12.0
         
@@ -338,7 +392,7 @@ class VideoTAADLAA:
         if H > tile_size or W > tile_size:
             tile_step = tile_size - 64
             tile_count = ((H + tile_step - 1) // tile_step) * ((W + tile_step - 1) // tile_step)
-            logger.info(f"[DLAA] Tiled inference: {tile_count} tiles")
+            logger.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
         
         with torch.inference_mode():
             for i in range(B):
@@ -347,7 +401,7 @@ class VideoTAADLAA:
 
                 # Subpixel jitter
                 fid = self.taa.frame_id
-                self.taa.frame_id = (fid + 1) % 4
+                self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
                 rgb = self._jitter(rgb, fid, jitter_scale, net)
 
                 # Edge-aware smoothing
@@ -410,10 +464,11 @@ class VideoTAADLAA:
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # Detail enhancement
-                    luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
-                    local_avg = F.avg_pool2d(luma, 3, stride=1, padding=1)
+                    local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
+                    fine_detail_rgb = dlaa_out - local_avg_rgb
 
-                    fine_detail = luma - local_avg
+                    luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
+                    fine_detail = 0.299 * fine_detail_rgb[:, 0:1] + 0.587 * fine_detail_rgb[:, 1:2] + 0.114 * fine_detail_rgb[:, 2:3]
 
                     # Adaptive detail shaping
                     detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
@@ -424,16 +479,25 @@ class VideoTAADLAA:
                     local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
                     global_detail = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
 
+                    edge_for_detail = torch.sqrt(
+                        F.conv2d(luma, net.sobel_x, padding=1) ** 2 +
+                        F.conv2d(luma, net.sobel_y, padding=1) ** 2 +
+                        1e-6
+                    )
+
+                    edge_detail_weight = torch.sigmoid((edge_for_detail - edge_sharp_threshold) * edge_sharp_slope)
+
                     detail_gain = (global_detail / (local_detail + 1e-6)).clamp(detail_min_gain, detail_max_gain)
                     detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
-
-                    dlaa_out = dlaa_out + fine_detail * detail_gain
+                    detail_gain = detail_gain * (1.0 + edge_detail_weight * detail_edge_boost)
+                    detail_gain = detail_gain * (1.0 - highlight_mask * detail_highlight_suppression)
                     
-                    # Edge-aware sharpening
-                    edge = torch.sqrt(F.conv2d(luma, net.sobel_x, padding=1) ** 2 + F.conv2d(luma, net.sobel_y, padding=1) ** 2 + 1e-6)
-
+                    edge = edge_for_detail
+                    
+                    dlaa_out = dlaa_out + fine_detail_rgb * detail_gain
+                    
                     edge_mask = torch.sigmoid((edge - edge_sharp_threshold) * edge_sharp_slope)
-                    edge_detail = fine_detail * edge_mask * (1.0 - highlight_mask)
+                    edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
                     dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
                     
@@ -449,10 +513,6 @@ class VideoTAADLAA:
                     # Blend the original
                     blend_weight = dlaa_strength * dlaa_blend_scale
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
-
-                # Post-sharpening
-                if sharpen_strength > 0:
-                    rgb = _unsharp_mask(rgb, sharpen_strength)
                 
                 rgb = torch.clamp(rgb, 0.0, 1.0)
 
