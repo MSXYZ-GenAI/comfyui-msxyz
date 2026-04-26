@@ -122,9 +122,19 @@ class DLAANet(nn.Module):
 
 
 class TAAState:
-    def __init__(self):
+    def __init__(self,
+        variance_gamma=1.5,
+        edge_guard_strength=2.0,
+        edge_guard_min=0.25,
+        edge_guard_max=1.0
+    ):
         self.history  = None
         self.frame_id = 0
+
+        self.variance_gamma      = variance_gamma
+        self.edge_guard_strength = edge_guard_strength
+        self.edge_guard_min      = edge_guard_min
+        self.edge_guard_max      = edge_guard_max
 
     def reset(self):
         self.history  = None
@@ -134,20 +144,14 @@ class TAAState:
         if self.history is None or self.history.shape != frame.shape:
             self.history = frame.detach().clone().to(frame.device)
             return frame
-        
-        # Adaptive
-        edge_guard_strength = 2.0
-        edge_guard_min      = 0.25
-        edge_guard_max      = 1.0
-
+            
         local_mean = F.avg_pool2d(frame, kernel_size=3, stride=1, padding=1)
         local_sq_mean = F.avg_pool2d(frame * frame, kernel_size=3, stride=1, padding=1)
         local_var = (local_sq_mean - local_mean * local_mean).clamp(min=0.0)
         local_std = torch.sqrt(local_var + 1e-6)
-
-        variance_gamma = 1.5
-        local_min = local_mean - local_std * variance_gamma
-        local_max = local_mean + local_std * variance_gamma
+        
+        local_min = local_mean - local_std * self.variance_gamma
+        local_max = local_mean + local_std * self.variance_gamma
 
         history_clipped = torch.maximum(torch.minimum(self.history, local_max), local_min)
 
@@ -168,7 +172,9 @@ class TAAState:
         edge_y = F.pad(edge_y, (0, 0, 0, 1))
 
         edge_strength = (edge_x + edge_y).clamp(0.0, 1.0)
-        edge_guard = (edge_guard_max - edge_strength * edge_guard_strength).clamp(edge_guard_min, edge_guard_max)
+        edge_guard = (
+            self.edge_guard_max - edge_strength * self.edge_guard_strength
+        ).clamp(self.edge_guard_min, self.edge_guard_max)
 
         motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
         motion_soft = motion_soft * motion_soft * (3.0 - 2.0 * motion_soft)
