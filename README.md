@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
 </p>
 
-Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharp, stable results, while VideoAdaptiveAA focuses on aliasing-prone regions. The system utilizes temporal accumulation, jittered sampling, and CNN-based refinement for superior edge quality.
+High-quality anti-aliasing nodes for video and image processing in ComfyUI workflows. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharper, more stable results, while VideoAdaptiveAA focuses on aliasing-prone regions. It uses temporal accumulation, jittered sampling, and CNN-based refinement to improve edge quality.
 
 ---
 
@@ -16,7 +16,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ---
 
-### Preview
+## Preview
 | TAA + DLAA Anti-Aliasing | Adaptive Anti-Aliasing |
 | :---: | :---: |
 | ![Video TAA + DLAA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/video_taadlaa.png) | ![Video Adaptive AA Node](https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/video_adaptive_aa.png) |
@@ -24,12 +24,14 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 ---
 
 ## Features
-- **Temporal Anti-Aliasing (TAA):** Blends frame history with motion data to eliminate flicker and sub-pixel jitter.
-- **Neural Reconstruction:** DLAA-inspired model for high-fidelity edge restoration.
-- **Ghosting-Free Tech:** Motion-aware suppression logic to minimize trailing artifacts in high-speed sequences.
+- **Temporal Anti-Aliasing (TAA):** Blends frame history to reduce flicker and sub-pixel jitter.
+- **Neural Reconstruction:** DLAA-inspired model for high-quality edge restoration.
+- **Hybrid Pipeline:** Combines temporal accumulation with neural reconstruction for stable, high-quality results.
+- **Reduced Ghosting:** Motion-aware suppression to minimize trailing artifacts in fast motion.
 - **4-Offset Jitter:** Deterministic sub-pixel jitter for sharper and more stable reconstruction.
-- **Edge-Preserving Clarity:** Sobel-based detection preserves fine textures while eliminating aliasing artifacts.
-- **Frequency-Aware Refinement:** Frequency and Perceptual loss optimization for crystal-clear, blur-free results.
+- **Edge-Preserving Clarity:** Sobel-based detection preserves fine textures while reducing aliasing.
+- **Frequency-Aware Refinement:** Uses frequency and perceptual losses for cleaner, sharper results.
+- **Lightweight Model:** Optimized for fast inference with minimal VRAM usage.
 
 ---
 
@@ -85,21 +87,22 @@ Recommended starting point:
 ---
 
 ### Presets
+> Presets replace manual parameter tuning and are designed to cover most use cases.
 
-The node includes built-in presets for common use cases:
+Built-in presets for common use cases:
 
 - **Auto** — balanced default behavior.
 - **Balanced** — stable anti-aliasing with moderate sharpening.
 - **Sharp** — stronger edge and detail reconstruction.
 - **Cinematic** — smoother temporal blending for softer motion.
 
-Start with **Auto**, then switch depending on your content.
+Start with **Auto**, then adjust based on your content.
 
 ---
 
 ## Installation
 
-Recommended: Install via ComfyUI-Manager.
+Recommended: Install via ComfyUI Manager.
 
 Manual installation:
 
