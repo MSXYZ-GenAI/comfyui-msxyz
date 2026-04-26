@@ -497,6 +497,8 @@ class VideoTAADLAA:
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
                 
+                motion_gate = torch.tensor(0.0, device=device)
+                
                 if preset == "Auto":
                     if self.taa.history is not None and self.taa.history.shape == rgb.shape:
                         scene_motion = torch.abs(rgb - self.taa.history).mean().item()
@@ -547,6 +549,8 @@ class VideoTAADLAA:
 
                 if self.taa.history is not None and self.taa.history.shape == rgb.shape:
                     motion_estimate = torch.abs(rgb - self.taa.history).mean()
+                    motion_gate = torch.clamp(motion_estimate * 12.0, 0.0, 1.0)
+                    
                     jitter_damping = (1.0 - motion_estimate * 8.0).clamp(0.45, 1.0)
                     adaptive_jitter_scale = preset_jitter_scale * jitter_damping
 
@@ -611,6 +615,11 @@ class VideoTAADLAA:
 
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
+                    
+                    # motion detail suppression
+                    detail_boost *= (1.0 - motion_gate * 0.30)
+                    edge_boost *= (1.0 - motion_gate * 0.40)
+                    micro_limit = micro_limit * (1.0 - motion_gate * 0.35)
                     
                     # gain
                     local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
