@@ -384,7 +384,6 @@ class VideoTAADLAA:
             self.taa.reset()
 
         net        = self._net(device)
-        B, H, W, C = images.shape
         out_list   = []
 
         # Select tile size based on VRAM
