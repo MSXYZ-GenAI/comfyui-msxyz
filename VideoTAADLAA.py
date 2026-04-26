@@ -211,6 +211,8 @@ class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
         self.taa       = TAAState()
+        
+        self._prev_dlaa_output = None
 
         # TAA
         self.taa_alpha      = 0.10
@@ -367,6 +369,33 @@ class VideoTAADLAA:
         )
 
         return x*(1.0 - mask) + blurred*mask
+        
+    def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
+        if previous is None:
+            return current
+
+        if previous.shape != current.shape:
+            return current
+
+        curr_luma = (
+            0.2126 * current[:, 0:1] +
+            0.7152 * current[:, 1:2] +
+            0.0722 * current[:, 2:3]
+        )
+
+        prev_luma = (
+            0.2126 * previous[:, 0:1] +
+            0.7152 * previous[:, 1:2] +
+            0.0722 * previous[:, 2:3]
+        )
+
+        motion = torch.abs(curr_luma - prev_luma)
+        motion = torch.clamp(motion / motion_threshold, 0.0, 1.0)
+
+        blend_mask = (1.0 - motion) * strength
+
+        refined = current * (1.0 - blend_mask) + previous * blend_mask
+        return refined.clamp(0.0, 1.0)
 
     def execute(self, images, preset):
 
@@ -420,6 +449,7 @@ class VideoTAADLAA:
             
         if reset_history:
             self.taa.reset()
+            self._prev_dlaa_output = None
 
         net        = self._net(device)
         out_list   = []
@@ -591,6 +621,21 @@ class VideoTAADLAA:
                     dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
                     
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_post_blend)
+                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
+
+                    if self._prev_dlaa_output is not None:
+                        if self._prev_dlaa_output.shape != dlaa_out.shape:
+                            self._prev_dlaa_output = None
+
+                    dlaa_out = self._temporal_refine(
+                        dlaa_out,
+                        self._prev_dlaa_output,
+                        strength=0.35,
+                        motion_threshold=0.08
+                    )
+
+                    self._prev_dlaa_output = dlaa_out.detach()
+
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
 
