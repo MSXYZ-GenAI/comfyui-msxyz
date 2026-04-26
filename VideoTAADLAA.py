@@ -248,7 +248,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images"            : ("IMAGE",),
-                "preset": (["Auto", "Balanced", "Sharp", "Cinematic"],),
+                "preset": (["Auto", "Balanced", "Detail", "Smooth"],),
             }
         }
         
@@ -405,6 +405,8 @@ class VideoTAADLAA:
         preset_jitter_scale = self.jitter_scale
         
         if preset == "Balanced":
+            temporal_strength = 0.35
+            motion_threshold = 0.08
             taa_strength = 0.45
             dlaa_strength = 0.65
             tone_strength = 0.12
@@ -412,7 +414,9 @@ class VideoTAADLAA:
             motion_sensitivity = 0.08
             preset_jitter_scale = 0.20
 
-        elif preset == "Sharp":
+        elif preset == "Detail":
+            temporal_strength = 0.22
+            motion_threshold = 0.06
             taa_strength = 0.35
             dlaa_strength = 0.95
             tone_strength = 0.12
@@ -420,16 +424,19 @@ class VideoTAADLAA:
             motion_sensitivity = 0.07
             preset_jitter_scale = 0.15
 
-        elif preset == "Cinematic":
+        elif preset == "Smooth":
+            temporal_strength = 0.45
+            motion_threshold = 0.10
             taa_strength = 0.65
             dlaa_strength = 0.65
             tone_strength = 0.16
             edge_sharp_strength = 0.08
             motion_sensitivity = 0.10
             preset_jitter_scale = 0.25
-            
+
         else:
-            # safety fallback
+            temporal_strength = 0.35
+            motion_threshold = 0.08
             taa_strength = 0.45
             dlaa_strength = 0.65
             tone_strength = 0.12
@@ -485,6 +492,8 @@ class VideoTAADLAA:
                         scene_motion = 0.02
 
                     if scene_motion < 0.015:
+                        temporal_strength = 0.28
+                        motion_threshold = 0.07
                         taa_strength = 0.35
                         dlaa_strength = 0.70
                         tone_strength = 0.10
@@ -493,6 +502,8 @@ class VideoTAADLAA:
                         preset_jitter_scale = 0.15
 
                     elif scene_motion < 0.045:
+                        temporal_strength = 0.35
+                        motion_threshold = 0.08
                         taa_strength = 0.45
                         dlaa_strength = 0.65
                         tone_strength = 0.12
@@ -501,6 +512,8 @@ class VideoTAADLAA:
                         preset_jitter_scale = 0.20
 
                     else:
+                        temporal_strength = 0.42
+                        motion_threshold = 0.10
                         taa_strength = 0.60
                         dlaa_strength = 0.60
                         tone_strength = 0.16
@@ -630,8 +643,8 @@ class VideoTAADLAA:
                     dlaa_out = self._temporal_refine(
                         dlaa_out,
                         self._prev_dlaa_output,
-                        strength=0.35,
-                        motion_threshold=0.08
+                        strength=temporal_strength,
+                        motion_threshold=motion_threshold
                     )
 
                     self._prev_dlaa_output = dlaa_out.detach()
