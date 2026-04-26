@@ -215,7 +215,7 @@ class VideoTAADLAA:
         self.edge_threshold = 0.15
 
         # DLAA blend
-        self.dlaa_blend_scale = 0.85
+        self.dlaa_blend_scale = 1.00
 
         # Highlight / tone
         self.tone_curve_bias      = 0.6
@@ -425,7 +425,7 @@ class VideoTAADLAA:
             motion_threshold = 0.06
             micro_limit = 0.05
             taa_strength = 0.35
-            dlaa_strength = 0.95
+            dlaa_strength = 1.00
             tone_strength = 0.12
             edge_sharp_strength = 0.18
             motion_sensitivity = 0.07
@@ -699,6 +699,10 @@ class VideoTAADLAA:
 
                     # final blend
                     blend_weight = dlaa_strength * self.dlaa_blend_scale
+
+                    if preset in ["Detail"]:
+                        blend_weight = min(blend_weight * 1.12, 1.0)
+                        
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
                 
                 rgb = torch.clamp(rgb, 0.0, 1.0)
