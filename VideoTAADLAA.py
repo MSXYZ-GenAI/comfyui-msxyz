@@ -399,7 +399,7 @@ class VideoTAADLAA:
 
     def execute(self, images, preset):
     
-        # Backward compatibility (old presets → new presets)
+        # Backward compatibility for old presets
         if preset == "Sharp":
             logger.info("[DLAA] Legacy preset 'Sharp' → 'Detail'")
             preset = "Detail"
