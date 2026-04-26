@@ -399,14 +399,7 @@ class VideoTAADLAA:
 
     def execute(self, images, preset):
     
-        # Backward compatibility for old presets
-        if preset == "Sharp":
-            logger.info("[DLAA] Legacy preset 'Sharp' → 'Detail'")
-            preset = "Detail"
-        elif preset == "Cinematic":
-            logger.info("[DLAA] Legacy preset 'Cinematic' → 'Smooth'")
-            preset = "Smooth"
-
+    
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
