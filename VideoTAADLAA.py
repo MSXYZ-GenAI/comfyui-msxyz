@@ -205,6 +205,35 @@ class VideoTAADLAA:
         self.net_cache = {}
         self.taa       = TAAState()
 
+        # TAA
+        self.taa_alpha      = 0.10
+        self.jitter_scale   = 0.20
+        self.edge_threshold = 0.15
+
+        # DLAA blend
+        self.dlaa_blend_scale = 0.85
+
+        # Highlight / tone
+        self.tone_curve_bias      = 0.6
+        self.highlight_pre_blend  = 0.15
+        self.highlight_post_blend = 0.08
+        self.highlight_threshold  = 0.85
+        self.highlight_slope      = 12.0
+
+        # Detail
+        self.detail_base_scale = 9.0
+        self.detail_ref_scale  = 0.02
+        self.detail_min_scale  = 6.0
+        self.detail_max_scale  = 12.0
+        self.detail_min_gain   = 0.10
+        self.detail_max_gain   = 0.26
+        self.detail_edge_boost = 0.35
+        self.detail_highlight_suppression = 0.5
+
+        # Edge sharpening
+        self.edge_sharp_threshold = 0.08
+        self.edge_sharp_slope     = 12.0
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -340,30 +369,7 @@ class VideoTAADLAA:
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        
-        # Adaptive
-        taa_alpha      = 0.10
-        jitter_scale   = 0.20
-        edge_threshold = 0.15
-        dlaa_blend_scale = 0.85
-        tone_curve_bias   = 0.6
-        highlight_pre_blend  = 0.15
-        highlight_post_blend = 0.08
-        highlight_threshold  = 0.85
-        highlight_slope      = 12.0
-        detail_base_scale = 9.0
-        detail_ref_scale  = 0.02
-        detail_min_scale  = 6.0
-        detail_max_scale  = 12.0
-        detail_min_gain   = 0.10
-        detail_max_gain   = 0.26
-        detail_edge_boost = 0.35
-        detail_highlight_suppression = 0.5
-        edge_sharp_threshold = 0.08
-        edge_sharp_slope     = 12.0
-        
-        
+                 
         B, H, W, C = images.shape
         is_single_image = (B == 1)
 
@@ -408,13 +414,13 @@ class VideoTAADLAA:
                 # Subpixel jitter
                 fid = self.taa.frame_id
                 self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
-                rgb = self._jitter(rgb, fid, jitter_scale, net)
+                rgb = self._jitter(rgb, fid, self.jitter_scale, net)
 
                 # Edge-aware smoothing
-                rgb = self._edge_aa(rgb, edge_threshold, blur_radius, net)
+                rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
 
                 # Temporal accumulation
-                taa_out = self.taa.update(rgb, taa_alpha, motion_sensitivity)
+                taa_out = self.taa.update(rgb, self.taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
                 # DLAA refinement pass
@@ -464,9 +470,9 @@ class VideoTAADLAA:
                     
                     # Highlight protection
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
-                    highlight_mask = torch.sigmoid((luma - highlight_threshold) * highlight_slope)
+                    highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
 
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # Detail enhancement
@@ -478,7 +484,7 @@ class VideoTAADLAA:
 
                     # Adaptive detail shaping
                     detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
-                    detail_scale = (detail_base_scale + (detail_ref_scale / (detail_strength + 1e-6))).clamp(detail_min_scale, detail_max_scale)
+                    detail_scale = (self.detail_base_scale + (self.detail_ref_scale / (detail_strength + 1e-6))).clamp(self.detail_min_scale, self.detail_max_scale)
 
                     fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
 
@@ -491,33 +497,33 @@ class VideoTAADLAA:
                         1e-6
                     )
 
-                    edge_detail_weight = torch.sigmoid((edge_for_detail - edge_sharp_threshold) * edge_sharp_slope)
+                    edge_detail_weight = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
 
-                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(detail_min_gain, detail_max_gain)
+                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(self.detail_min_gain, self.detail_max_gain)
                     detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
-                    detail_gain = detail_gain * (1.0 + edge_detail_weight * detail_edge_boost)
-                    detail_gain = detail_gain * (1.0 - highlight_mask * detail_highlight_suppression)
+                    detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
+                    detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
                     
                     edge = edge_for_detail
                     
                     dlaa_out = dlaa_out + fine_detail_rgb * detail_gain
                     
-                    edge_mask = torch.sigmoid((edge - edge_sharp_threshold) * edge_sharp_slope)
+                    edge_mask = torch.sigmoid((edge - self.edge_sharp_threshold) * self.edge_sharp_slope)
                     edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
                     dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
                     
                     # Soft highlight compression
-                    tone_mapped = dlaa_out / (dlaa_out + tone_curve_bias)
+                    tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
                     dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
                     
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
 
 
                     # Blend the original
-                    blend_weight = dlaa_strength * dlaa_blend_scale
+                    blend_weight = dlaa_strength * self.dlaa_blend_scale
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
                 
                 rgb = torch.clamp(rgb, 0.0, 1.0)
@@ -531,4 +537,4 @@ class VideoTAADLAA:
 
 
 NODE_CLASS_MAPPINGS        = {"VideoTAADLAA": VideoTAADLAA}
-NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video TAA + DLAA Anti-Aliasing"}
+NODE_DISPLAY_NAME_MAPPINGS = {"VideoTAADLAA": "🎮 Video Anti-Aliasing (TAA + DLAA)"}
