@@ -398,6 +398,12 @@ class VideoTAADLAA:
         return refined.clamp(0.0, 1.0)
 
     def execute(self, images, preset):
+    
+        # Backward compatibility (old presets → new presets)
+        if preset == "Sharp":
+            preset = "Detail"
+        elif preset == "Cinematic":
+            preset = "Smooth"
 
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
