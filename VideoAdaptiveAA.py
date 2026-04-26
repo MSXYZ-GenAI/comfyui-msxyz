@@ -1,5 +1,6 @@
-# Created by MSXYZ (AI-assisted)
-# Fix: Device/dtype synchronization
+# Video TAA + DLAA
+# v0.1.0
+# AI-assisted implementation
 
 import torch
 import torch.nn.functional as F
@@ -9,13 +10,13 @@ class VideoAdaptiveAA:
         pass
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
         return {
             "required": {
                 "images": ("IMAGE",),
                 "strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1}),
                 "edge_threshold": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "blur_radius": ("INT", {"default": 1, "min": 1, "max": 3, "step": 1}),
+                "blur_radius": ("INT", {"default": 1, "min": 0, "max": 3, "step": 1}),
             },
         }
 
@@ -25,6 +26,9 @@ class VideoAdaptiveAA:
 
     def apply_aa(self, images, strength, edge_threshold, blur_radius):
         img = images.permute(0, 3, 1, 2)
+        
+        if strength <= 0 or blur_radius <= 0:
+            return (images,)
 
         has_alpha = img.shape[1] == 4
         if has_alpha:
