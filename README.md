@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
 </p>
 
-Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharp, stable results, while VideoAdaptiveAA targets specific aliasing-prone regions. The system utilizes temporal accumulation, jittered sampling, and CNN-based refinement for superior edge quality.
+Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharp, stable results, while VideoAdaptiveAA focuses on aliasing-prone regions. The system utilizes temporal accumulation, jittered sampling, and CNN-based refinement for superior edge quality.
 
 ---
 
@@ -25,9 +25,9 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 
 ## Features
 - **Temporal Anti-Aliasing (TAA):** Blends frame history with motion data to eliminate flicker and sub-pixel jitter.
-- **Neural Reconstruction (MSE 0.000023):** DLAA-inspired model for near-lossless, high-fidelity edge restoration.
+- **Neural Reconstruction:** DLAA-inspired model for high-fidelity edge restoration.
 - **Ghosting-Free Tech:** Motion-aware suppression logic to minimize trailing artifacts in high-speed sequences.
-- **4-Offset Jitter:** Deterministic sub-pixel sampling for sharper and more consistent reconstruction stability.
+- **4-Offset Jitter:** Deterministic sub-pixel jitter for sharper and more stable reconstruction.
 - **Edge-Preserving Clarity:** Sobel-based detection preserves fine textures while eliminating aliasing artifacts.
 - **Frequency-Aware Refinement:** Frequency and Perceptual loss optimization for crystal-clear, blur-free results.
 
@@ -57,6 +57,7 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
   <tr>
     <td align="center"><strong></strong></td>
     <td align="center"><strong></strong></td>
+	<td align="center"><strong></strong></td>
   </tr>
   <tr>
     <td><video src="https://github.com/user-attachments/assets/4109726e-c5db-404b-9c0d-23d49b9641cf" width="500" controls autoplay muted loop>
@@ -71,17 +72,28 @@ Advanced anti-aliasing nodes for videos and images. VideoTAADLAA combines TAA wi
 ---
 
 ## 🚀 How to use
-> - Test the effect by increasing `dlaa_strength` to **0.8** or **1.0**.  
 
-**Parameters**
-- **taa_strength:** Controls the influence of previous frames to reduce flickering.
-- (Default: 0.5 | Fast Motion: 0.4 | Static: 0.9)
-- **dlaa_strength:** Power of the Smart DLAA neural reconstruction model.
-- (Default: 0.6 | Subtle: 0.4 | Aggressive: 1.0)
-- **sharpen_strength:** Final crispness adjustment to enhance edge and texture definition.
-- (Default: 0.2 | Off: 0.0 | Maximum: 2.0)
-- **motion_sensitivity:** Threshold to disable temporal smoothing in moving areas.
-- (Default: 0.1 | Flicker-free: 0.08 | High-speed: 0.3)
+Add the node to your workflow and choose a preset.
+
+Recommended starting point:
+
+- Use **Auto** for general footage.
+- Use **Balanced** for stable video cleanup.
+- Use **Sharp** for images, hair, fur, wires, and high-detail edges.
+- Use **Cinematic** for smoother motion and softer temporal blending. 
+
+---
+
+### Presets
+
+The node includes built-in presets for common use cases:
+
+- **Auto** — balanced default behavior.
+- **Balanced** — stable anti-aliasing with moderate sharpening.
+- **Sharp** — stronger edge and detail reconstruction.
+- **Cinematic** — smoother temporal blending for softer motion.
+
+Start with **Auto**, then switch depending on your content.
 
 ---
 
