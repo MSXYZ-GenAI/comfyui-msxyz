@@ -399,13 +399,20 @@ class VideoTAADLAA:
 
     def execute(self, images, preset):
     
-    
+        # Backward compatibility
+        if preset == "Sharp":
+            preset = "Detail"
+        elif preset == "Cinematic":
+            preset = "Smooth"
+            
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         preset_jitter_scale = self.jitter_scale
         
         if preset == "Balanced":
+            detail_boost = 1.00
+            edge_boost = 1.00
             temporal_strength = 0.35
             motion_threshold = 0.08
             taa_strength = 0.45
@@ -416,6 +423,8 @@ class VideoTAADLAA:
             preset_jitter_scale = 0.20
 
         elif preset == "Detail":
+            detail_boost = 1.18
+            edge_boost = 1.25
             temporal_strength = 0.22
             motion_threshold = 0.06
             taa_strength = 0.35
@@ -426,6 +435,8 @@ class VideoTAADLAA:
             preset_jitter_scale = 0.15
 
         elif preset == "Smooth":
+            detail_boost = 0.85
+            edge_boost = 0.75
             temporal_strength = 0.45
             motion_threshold = 0.10
             taa_strength = 0.65
@@ -436,6 +447,8 @@ class VideoTAADLAA:
             preset_jitter_scale = 0.25
 
         else:
+            detail_boost = 1.00
+            edge_boost = 1.00
             temporal_strength = 0.35
             motion_threshold = 0.08
             taa_strength = 0.45
@@ -493,6 +506,8 @@ class VideoTAADLAA:
                         scene_motion = 0.02
 
                     if scene_motion < 0.015:
+                        detail_boost = 1.12
+                        edge_boost = 1.15
                         temporal_strength = 0.28
                         motion_threshold = 0.07
                         taa_strength = 0.35
@@ -503,6 +518,8 @@ class VideoTAADLAA:
                         preset_jitter_scale = 0.15
 
                     elif scene_motion < 0.045:
+                        detail_boost = 1.00
+                        edge_boost = 1.00
                         temporal_strength = 0.35
                         motion_threshold = 0.08
                         taa_strength = 0.45
@@ -513,6 +530,8 @@ class VideoTAADLAA:
                         preset_jitter_scale = 0.20
 
                     else:
+                        detail_boost = 0.85
+                        edge_boost = 0.75
                         temporal_strength = 0.42
                         motion_threshold = 0.10
                         taa_strength = 0.60
@@ -623,12 +642,12 @@ class VideoTAADLAA:
                     detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
                     detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
                     
-                    dlaa_out = dlaa_out + fine_detail_rgb * detail_gain
+                    dlaa_out = dlaa_out + fine_detail_rgb * detail_gain * detail_boost
                     
                     edge_mask = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
                     edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
-                    dlaa_out = dlaa_out + edge_detail * edge_sharp_strength
+                    dlaa_out = dlaa_out + edge_detail * edge_sharp_strength * edge_boost
                     
                     # tone compression (highlights)
                     tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
