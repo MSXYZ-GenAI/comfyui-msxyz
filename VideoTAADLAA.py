@@ -498,7 +498,7 @@ class VideoTAADLAA:
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
                 
-                motion_gate = torch.tensor(0.0, device=device)
+                motion_gate = 0.0 
                 
                 if preset == "Auto":
                     if self.taa.history is not None and self.taa.history.shape == rgb.shape:
