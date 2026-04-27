@@ -6,6 +6,7 @@
 
 import os
 import logging
+import threading
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -45,12 +46,12 @@ PRESETS = {
     "Detail": {
         "detail_boost": 1.44,
         "edge_boost": 1.36,
-        "temporal_strength": 0.04,
+        "temporal_strength": 0.00,
         "micro_limit": 0.050,
         "luma_boost_mult": 1.08,
         "saturation_boost_mult": 1.03,
         "motion_threshold": 0.050,
-        "taa_strength": 0.12,
+        "taa_strength": 0.00,
         "dlaa_strength": 1.25,
         "tone_strength": 0.06,
         "edge_sharp_strength": 0.14,
@@ -306,6 +307,7 @@ class TAAState:
 class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
+        self._net_lock = threading.Lock()
         self.taa       = TAAState()
         
         self._prev_dlaa_output = None
@@ -314,9 +316,9 @@ class VideoTAADLAA:
         
         self.preset_model_weight = {
             "Balanced": 1.00,
-            "Detail": 1.32,
+            "Detail": 1.38,
             "Smooth": 0.90,
-            "Auto": 1.00,
+            "Auto": 1.10,
         }
 
         self.taa_alpha      = 0.10
@@ -342,6 +344,13 @@ class VideoTAADLAA:
 
         self.edge_sharp_threshold = 0.08
         self.edge_sharp_slope     = 12.0
+        self.edge_aa_slope = 14.0
+
+        self.motion_gate_scale = 12.0
+        self.jitter_motion_damping = 8.0
+
+        self.detail_dark_luma_start = 0.20
+        self.detail_dark_luma_range = 0.30
         
         self.luma_boost_base        = 0.03
         self.saturation_boost_base  = 0.06
@@ -362,13 +371,20 @@ class VideoTAADLAA:
 
     def _net(self, device):
         key = str(device)
-        if key not in self.net_cache:
+
+        if key in self.net_cache:
+            return self.net_cache[key]
+
+        with self._net_lock:
+            if key in self.net_cache:
+                return self.net_cache[key]
+
             net = DLAANet().to(device)
 
             base_path = os.path.dirname(os.path.realpath(__file__))
 
             safetensors_path = os.path.join(base_path, "DLAANet.safetensors")
-            pth_path         = os.path.join(base_path, "DLAANet.pth")
+            pth_path = os.path.join(base_path, "DLAANet.pth")
 
             if os.path.exists(safetensors_path):
                 state_dict = load_file(safetensors_path, device=str(device))
@@ -380,14 +396,14 @@ class VideoTAADLAA:
                 raise FileNotFoundError(
                     f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
                 )
-            
+
             if "jitter_offsets" in state_dict:
                 del state_dict["jitter_offsets"]
 
             net.load_state_dict(state_dict, strict=False)
             net = net.float()
             net.eval()
-            
+
             n_params = sum(p.numel() for p in net.parameters())
             log.info(f"[DLAA] Model parameters: {n_params/1e6:.2f}M")
 
@@ -402,8 +418,15 @@ class VideoTAADLAA:
         if H <= tile_size and W <= tile_size:
             return torch.clamp(net(x), 0.0, 1.0)
 
-        step   = tile_size - overlap * 2
-        out    = torch.zeros_like(x)
+
+        step = tile_size - overlap * 2
+        
+        if step <= 0:
+            raise ValueError(
+                f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
+            )
+
+        out = torch.zeros_like(x)
         weight = torch.zeros(B, 1, H, W, device=x.device)
 
         y0 = 0
@@ -465,7 +488,7 @@ class VideoTAADLAA:
         sy   = F.conv2d(gray, net.sobel_y, padding=1)
         edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
 
-        mask = torch.sigmoid((edge - thr) * 14.0)
+        mask = torch.sigmoid((edge - thr) * self.edge_aa_slope)
 
         blurred = F.avg_pool2d(
             F.pad(x, [blur_radius]*4, mode="reflect"),
@@ -503,7 +526,10 @@ class VideoTAADLAA:
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        cfg = PRESETS.get(preset, PRESETS["Balanced"]).copy()
+        if preset == "Auto":
+            cfg = AUTO_BALANCED.copy()
+        else:
+            cfg = PRESETS.get(preset, PRESETS["Balanced"]).copy()
 
         detail_boost = cfg["detail_boost"]
         edge_boost = cfg["edge_boost"]
@@ -534,14 +560,11 @@ class VideoTAADLAA:
             
         if is_single_image:
             blur_radius = 0
-            reset_history = True
         else:
             blur_radius = 0 if preset == "Detail" else 1
-            reset_history = False
-            
-        if reset_history:
-            self.taa.reset()
-            self._prev_dlaa_output = None
+
+        self.taa.reset()
+        self._prev_dlaa_output = None
 
         net        = self._net(device)
         out_list   = []
@@ -636,9 +659,15 @@ class VideoTAADLAA:
 
                 if self.taa.history is not None and self.taa.history.shape == rgb.shape:
                     motion_estimate = torch.abs(rgb - self.taa.history).mean()
-                    motion_gate = torch.clamp(motion_estimate * 12.0, 0.0, 1.0)
+                    motion_gate = torch.clamp(
+                        motion_estimate * self.motion_gate_scale,
+                        0.0,
+                        1.0
+                    )
                     
-                    jitter_damping = (1.0 - motion_estimate * 8.0).clamp(0.45, 1.0)
+                    jitter_damping = (
+                        1.0 - motion_estimate * self.jitter_motion_damping
+                    ).clamp(0.45, 1.0)
                     adaptive_jitter_scale = preset_jitter_scale * jitter_damping
 
                 rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
@@ -743,7 +772,11 @@ class VideoTAADLAA:
                     fine_detail = rgb_luma(fine_detail_rgb)
                     
                     if preset in ["Detail"]:
-                        dark_mask = torch.clamp((luma - 0.20) / 0.30, 0.0, 1.0)
+                        dark_mask = torch.clamp(
+                            (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
+                            0.0,
+                            1.0
+                        )
                         micro_limit = micro_limit * (0.6 + 0.4 * dark_mask)
                     else:
                         dark_mask = 1.0
