@@ -1,5 +1,5 @@
 # Video TAA + DLAA
-# v0.3.2
+# 0.1.2
 # AI-assisted
 
 
@@ -427,9 +427,9 @@ class VideoTAADLAA:
             edge_boost = 1.25
             temporal_strength = 0.22
             motion_threshold = 0.06
-            micro_limit = 0.05
-            luma_boost_mult = 1.2
-            saturation_boost_mult = 1.1
+            micro_limit = 0.042
+            luma_boost_mult = 1.05
+            saturation_boost_mult = 1.0
             taa_strength = 0.35
             dlaa_strength = 1.00
             tone_strength = 0.12
@@ -636,9 +636,9 @@ class VideoTAADLAA:
                     
                     # motion detail suppression
                     if preset in ["Detail"]:
-                        detail_boost *= (1.0 - motion_gate * 0.15)
-                        edge_boost *= (1.0 - motion_gate * 0.05)
-                        micro_limit *= (1.0 - motion_gate * 0.12)
+                        detail_boost *= (1.0 - motion_gate * 0.22)
+                        edge_boost *= (1.0 - motion_gate * 0.12)
+                        micro_limit *= (1.0 - motion_gate * 0.18)
                     else:
                         detail_boost *= (1.0 - motion_gate * 0.20)
                         edge_boost *= (1.0 - motion_gate * 0.15)
@@ -650,6 +650,12 @@ class VideoTAADLAA:
 
                     luma = 0.299 * dlaa_out[:, 0:1] + 0.587 * dlaa_out[:, 1:2] + 0.114 * dlaa_out[:, 2:3]
                     fine_detail = 0.299 * fine_detail_rgb[:, 0:1] + 0.587 * fine_detail_rgb[:, 1:2] + 0.114 * fine_detail_rgb[:, 2:3]
+                    
+                    if preset in ["Detail"]:
+                        dark_mask = torch.clamp((luma - 0.20) / 0.30, 0.0, 1.0)
+                        micro_limit = micro_limit * (0.6 + 0.4 * dark_mask)
+                    else:
+                        dark_mask = 1.0
 
                     # clamp detail spikes
                     detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
@@ -676,14 +682,14 @@ class VideoTAADLAA:
                     detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
                     detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
                     
-                    micro_detail = fine_detail_rgb * detail_gain * detail_boost
+                    micro_detail = fine_detail_rgb * detail_gain * detail_boost * dark_mask
                     micro_detail = micro_detail.clamp(-micro_limit, micro_limit)
                     dlaa_out = dlaa_out + micro_detail
                     
                     edge_mask = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
                     edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
-                    edge_boosted = edge_detail * edge_sharp_strength * edge_boost
+                    edge_boosted = edge_detail * edge_sharp_strength * edge_boost * dark_mask
                     edge_boosted = edge_boosted.clamp(-micro_limit * 0.7, micro_limit * 0.7)
                     dlaa_out = dlaa_out + edge_boosted
                     
