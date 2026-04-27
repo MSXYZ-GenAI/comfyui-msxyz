@@ -560,14 +560,43 @@ class VideoTAADLAA:
         if   vram_mb <= 8192:  tile_size = 512
         elif vram_mb <= 16384: tile_size = 1024
         else:                  tile_size = 1024
-
+        
         if H > tile_size or W > tile_size:
             tile_step = tile_size - 64
             tile_count = ((H + tile_step - 1) // tile_step) * ((W + tile_step - 1) // tile_step)
             log.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
         
+        base_detail_boost = detail_boost
+        base_edge_boost = edge_boost
+        base_temporal_strength = temporal_strength
+        base_micro_limit = micro_limit
+        base_luma_boost_mult = luma_boost_mult
+        base_saturation_boost_mult = saturation_boost_mult
+        base_motion_threshold = motion_threshold
+        base_taa_strength = taa_strength
+        base_dlaa_strength = dlaa_strength
+        base_tone_strength = tone_strength
+        base_edge_sharp_strength = edge_sharp_strength
+        base_motion_sensitivity = motion_sensitivity
+        base_jitter_scale = preset_jitter_scale
+        
         with torch.inference_mode():
             for i in range(B):
+            
+                detail_boost = base_detail_boost
+                edge_boost = base_edge_boost
+                temporal_strength = base_temporal_strength
+                micro_limit = base_micro_limit
+                luma_boost_mult = base_luma_boost_mult
+                saturation_boost_mult = base_saturation_boost_mult
+                motion_threshold = base_motion_threshold
+                taa_strength = base_taa_strength
+                dlaa_strength = base_dlaa_strength
+                tone_strength = base_tone_strength
+                edge_sharp_strength = base_edge_sharp_strength
+                motion_sensitivity = base_motion_sensitivity
+                preset_jitter_scale = base_jitter_scale
+                
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
                 
