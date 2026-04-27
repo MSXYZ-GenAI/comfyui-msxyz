@@ -45,17 +45,17 @@ PRESETS = {
         "jitter_scale": 0.20,
     },
     "Detail": {
-        "detail_boost": 1.32,
-        "edge_boost": 1.42,
-        "temporal_strength": 0.10,
-        "micro_limit": 0.052,
-        "luma_boost_mult": 1.04,
-        "saturation_boost_mult": 1.00,
+        "detail_boost": 1.44,
+        "edge_boost": 1.36,
+        "temporal_strength": 0.04,
+        "micro_limit": 0.050,
+        "luma_boost_mult": 1.08,
+        "saturation_boost_mult": 1.03,
         "motion_threshold": 0.050,
-        "taa_strength": 0.20,
+        "taa_strength": 0.12,
         "dlaa_strength": 1.25,
-        "tone_strength": 0.05,
-        "edge_sharp_strength": 0.28,
+        "tone_strength": 0.06,
+        "edge_sharp_strength": 0.22,
         "motion_sensitivity": 0.060,
         "jitter_scale": 0.10,
     },
@@ -274,7 +274,7 @@ class VideoTAADLAA:
         # Extra model weight preset
         self.preset_model_weight = {
             "Balanced": 1.00,
-            "Detail": 1.20,
+            "Detail": 1.32,
             "Smooth": 0.90,
             "Auto": 1.00,
         }
@@ -494,7 +494,7 @@ class VideoTAADLAA:
             blur_radius = 0
             reset_history = True
         else:
-            blur_radius   = 1
+            blur_radius = 0 if preset == "Detail" else 1
             reset_history = False
             
         if reset_history:
@@ -503,6 +503,9 @@ class VideoTAADLAA:
 
         net        = self._net(device)
         out_list   = []
+
+        delta_sum = 0.0
+        delta_count = 0
 
         # tile size
         if mm is not None:
@@ -664,13 +667,19 @@ class VideoTAADLAA:
                     preset_model_weight = self.preset_model_weight.get(preset, 1.00)
 
                     model_delta = dlaa_out - rgb
+                    model_delta_value = model_delta.abs().mean().item()
+
+                    delta_sum += model_delta_value
+                    delta_count += 1
+
                     dlaa_out = torch.clamp(
                         rgb + model_delta * self.model_weight * preset_model_weight,
                         0.0,
                         1.0
                     )
+
                     if i == 0:
-                        logger.info(f"[DLAA] model_delta={model_delta.abs().mean().item():.6f}")
+                        logger.info(f"[DLAA] model_delta_first={model_delta_value:.6f}")
                     
                     # detail
                     luma = rgb_luma(dlaa_out)
@@ -681,10 +690,10 @@ class VideoTAADLAA:
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # motion detail suppression
-                    if preset in ["Detail"]:
-                        detail_boost *= (1.0 - motion_gate * 0.12)
-                        edge_boost *= (1.0 - motion_gate * 0.06)
-                        micro_limit *= (1.0 - motion_gate * 0.08)
+                    if preset == "Detail":
+                        detail_boost *= (1.0 - motion_gate * 0.05)
+                        edge_boost *= (1.0 - motion_gate * 0.08)
+                        micro_limit *= (1.0 - motion_gate * 0.18)
                     else:
                         detail_boost *= (1.0 - motion_gate * 0.20)
                         edge_boost *= (1.0 - motion_gate * 0.15)
@@ -784,10 +793,13 @@ class VideoTAADLAA:
                 rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-
+    
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
 
+        if delta_count > 0:
+            logger.info(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
+    
         return (torch.cat(out_list, dim=0),)
 
 
