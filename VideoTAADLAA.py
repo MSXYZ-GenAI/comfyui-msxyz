@@ -23,7 +23,6 @@ LUMA_G = 0.7152
 LUMA_B = 0.0722
 
 
-
 def rgb_luma(x: torch.Tensor) -> torch.Tensor:
     return LUMA_R * x[:, 0:1] + LUMA_G * x[:, 1:2] + LUMA_B * x[:, 2:3]
     
@@ -74,8 +73,6 @@ PRESETS = {
         "jitter_scale": 0.25,
     },
 }
-
-
 
 
 class DLAANet(nn.Module):
@@ -592,39 +589,46 @@ class VideoTAADLAA:
                 # DLAA
                 if dlaa_strength > 0:
 
-                    try:
-                        dlaa_out = self._tiled_forward(
-                            net,
-                            rgb,
-                            tile_size=tile_size,
-                            overlap=32
-                        )
-                    except torch.OutOfMemoryError:
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
+                    current_tile_size = tile_size
+                    min_tile_size = 128
+                    dlaa_out = None
+                    last_oom_error = None
 
-                        logger.warning("Retrying DLAA with smaller tiles")
-
-                        retry_tile = max(256, tile_size // 2)
-
+                    while current_tile_size >= min_tile_size:
                         try:
                             dlaa_out = self._tiled_forward(
                                 net,
                                 rgb,
-                                tile_size=retry_tile,
+                                tile_size=current_tile_size,
                                 overlap=32
                             )
-                        except torch.OutOfMemoryError:
+                            break
+
+                        except torch.OutOfMemoryError as e:
+                            last_oom_error = e
+
                             if torch.cuda.is_available():
                                 torch.cuda.empty_cache()
 
-                            retry_tile = 256
-                            dlaa_out = self._tiled_forward(
-                                net,
-                                rgb,
-                                tile_size=retry_tile,
-                                overlap=32
+                            next_tile_size = current_tile_size // 2
+
+                            if next_tile_size < min_tile_size:
+                                logger.error(
+                                    "DLAA tiled inference failed at minimum tile size %d.",
+                                    current_tile_size
+                                )
+                                raise last_oom_error
+
+                            logger.warning(
+                                "Out of VRAM at tile size %d, retrying with %d.",
+                                current_tile_size,
+                                next_tile_size
                             )
+
+                            current_tile_size = next_tile_size
+
+                    if dlaa_out is None:
+                        raise RuntimeError("DLAA tiled inference failed.")
                     
                     
                     # luminance match
