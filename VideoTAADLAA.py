@@ -18,14 +18,16 @@ except ImportError:
     mm = None
 logger = logging.getLogger("VideoTAADLAA")
 
-LUMA_R = 0.2126
-LUMA_G = 0.7152
-LUMA_B = 0.0722
+
+# Rec.709 luma weights
+LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
 
 
 def rgb_luma(x: torch.Tensor) -> torch.Tensor:
-    return LUMA_R * x[:, 0:1] + LUMA_G * x[:, 1:2] + LUMA_B * x[:, 2:3]
-    
+    r, g, b = LUMA_WEIGHTS
+    return r * x[:, 0:1] + g * x[:, 1:2] + b * x[:, 2:3]
+
+
 PRESETS = {
     "Balanced": {
         "detail_boost": 1.00,
@@ -82,7 +84,7 @@ class DLAANet(nn.Module):
 
         base_channels = 192
 
-        # Sobel
+        # Sobel edge kernels
         self.register_buffer("sobel_x", torch.tensor([[-1,0,1],[-2,0,2],[-1,0,1]], dtype=torch.float32).view(1,1,3,3))
         self.register_buffer("sobel_y", torch.tensor([[-1,-2,-1],[0,0,0],[1,2,1]], dtype=torch.float32).view(1,1,3,3))
         
@@ -564,7 +566,7 @@ class VideoTAADLAA:
                         motion_sensitivity = 0.10
                         preset_jitter_scale = 0.25
                 
-                # jitter
+                # jitter pattern
                 fid = self.taa.frame_id
                 self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
 
