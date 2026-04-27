@@ -45,19 +45,19 @@ PRESETS = {
         "jitter_scale": 0.20,
     },
     "Detail": {
-        "detail_boost": 1.18,
-        "edge_boost": 1.25,
-        "temporal_strength": 0.22,
-        "micro_limit": 0.042,
-        "luma_boost_mult": 1.05,
+        "detail_boost": 1.32,
+        "edge_boost": 1.42,
+        "temporal_strength": 0.10,
+        "micro_limit": 0.052,
+        "luma_boost_mult": 1.04,
         "saturation_boost_mult": 1.00,
-        "motion_threshold": 0.06,
-        "taa_strength": 0.35,
-        "dlaa_strength": 1.00,
-        "tone_strength": 0.12,
-        "edge_sharp_strength": 0.18,
-        "motion_sensitivity": 0.07,
-        "jitter_scale": 0.15,
+        "motion_threshold": 0.050,
+        "taa_strength": 0.20,
+        "dlaa_strength": 1.25,
+        "tone_strength": 0.05,
+        "edge_sharp_strength": 0.28,
+        "motion_sensitivity": 0.060,
+        "jitter_scale": 0.10,
     },
     "Smooth": {
         "detail_boost": 0.85,
@@ -174,8 +174,9 @@ class DLAANet(nn.Module):
 
         decoded = self.dec(torch.cat([context, feat_low], dim=1))
         residual = self.reconstructor(decoded)
-
-        return input_img + residual
+        
+        
+        return torch.clamp(input_img + residual, 0.0, 1.0)
 
 
 class TAAState:
@@ -264,6 +265,20 @@ class VideoTAADLAA:
         self.taa       = TAAState()
         
         self._prev_dlaa_output = None
+ 
+ 
+        # Base weight
+        # 1.00 = neutral, 1.10-1.15 = stronger, 1.25 = aggressive
+        self.model_weight = 1.00
+        
+        # Extra model weight preset
+        self.preset_model_weight = {
+            "Balanced": 1.00,
+            "Detail": 1.20,
+            "Smooth": 0.90,
+            "Auto": 1.00,
+        }
+
 
         # TAA
         self.taa_alpha      = 0.10
@@ -324,10 +339,10 @@ class VideoTAADLAA:
 
             if os.path.exists(safetensors_path):
                 state_dict = load_file(safetensors_path, device=str(device))
-                logger.info("Loaded DLAANet.safetensors")
+                logger.info("[DLAA] Loaded DLAANet.safetensors")
             elif os.path.exists(pth_path):
                 state_dict = torch.load(pth_path, map_location=device)
-                logger.info("Loaded DLAANet.pth")
+                logger.info("[DLAA] Loaded DLAANet.pth")
             else:
                 raise FileNotFoundError(
                     f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
@@ -369,7 +384,7 @@ class VideoTAADLAA:
                 x0_c  = max(0, x1 - tile_size)
 
                 tile         = x[:, :, y0_c:y1, x0_c:x1]
-                dlaa_out_tile = torch.clamp(net(tile), 0.0, 1.0)
+                dlaa_out_tile = net(tile)
 
 
                 th, tw = dlaa_out_tile.shape[2], dlaa_out_tile.shape[3]
@@ -604,7 +619,14 @@ class VideoTAADLAA:
                                 tile_size=current_tile_size,
                                 overlap=32
                             )
+                            
+                            if i == 0:
+                                raw_model_delta = (dlaa_out - rgb).abs().mean().item()
+                                logger.info(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
+                            
                             break
+                            
+                            
 
                         except torch.OutOfMemoryError as e:
                             last_oom_error = e
@@ -636,21 +658,33 @@ class VideoTAADLAA:
                     # luminance match
                     dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
                     rgb_mean  = rgb.mean(dim=(1,2,3), keepdim=True)
-
                     dlaa_out = dlaa_out - dlaa_mean + rgb_mean
+                    
+
+                    preset_model_weight = self.preset_model_weight.get(preset, 1.00)
+
+                    model_delta = dlaa_out - rgb
+                    dlaa_out = torch.clamp(
+                        rgb + model_delta * self.model_weight * preset_model_weight,
+                        0.0,
+                        1.0
+                    )
+                    if i == 0:
+                        logger.info(f"[DLAA] model_delta={model_delta.abs().mean().item():.6f}")
                     
                     # detail
                     luma = rgb_luma(dlaa_out)
                     highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
-
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_pre_blend)
+                    
+                    highlight_pre_blend = self.highlight_pre_blend * (0.45 if preset == "Detail" else 1.0)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
                     # motion detail suppression
                     if preset in ["Detail"]:
-                        detail_boost *= (1.0 - motion_gate * 0.22)
-                        edge_boost *= (1.0 - motion_gate * 0.12)
-                        micro_limit *= (1.0 - motion_gate * 0.18)
+                        detail_boost *= (1.0 - motion_gate * 0.12)
+                        edge_boost *= (1.0 - motion_gate * 0.06)
+                        micro_limit *= (1.0 - motion_gate * 0.08)
                     else:
                         detail_boost *= (1.0 - motion_gate * 0.20)
                         edge_boost *= (1.0 - motion_gate * 0.15)
@@ -719,7 +753,8 @@ class VideoTAADLAA:
                     saturation_boost = self.saturation_boost_base * saturation_boost_mult * (1.0 - highlight_mask * 0.5)
                     dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
                     
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * self.highlight_post_blend)
+                    highlight_post_blend = self.highlight_post_blend * (0.50 if preset == "Detail" else 1.0)
+                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
 
                     if self._prev_dlaa_output is not None:
