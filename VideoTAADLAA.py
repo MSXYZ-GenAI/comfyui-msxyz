@@ -562,7 +562,30 @@ class VideoTAADLAA:
 
         refined = current * (1.0 - blend_mask) + previous * blend_mask
         return refined.clamp(0.0, 1.0)
+        
+    def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
+        if preset == "Auto":
+            if taa.history is not None and taa.history.shape == rgb.shape:
+                scene_motion = torch.abs(rgb - taa.history).mean().item()
+            else:
+                scene_motion = self.auto_default_scene_motion
 
+            if scene_motion < self.auto_static_motion_threshold:
+                frame_cfg = AUTO_STATIC
+            elif scene_motion < self.auto_balanced_motion_threshold:
+                frame_cfg = AUTO_BALANCED
+            else:
+                frame_cfg = AUTO_MOTION
+        else:
+            frame_cfg = PRESETS.get(preset, PRESETS["Balanced"])
+
+        cfg = frame_cfg.copy()
+
+        if preset == "Detail" and is_single_image:
+            cfg.update(SINGLE_IMAGE_DETAIL)
+
+        return cfg
+        
     def execute(self, images, preset):
     
         if preset == "Sharp":
@@ -572,8 +595,6 @@ class VideoTAADLAA:
             
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        base_cfg = None if preset == "Auto" else PRESETS.get(preset, PRESETS["Balanced"]).copy()
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
@@ -621,20 +642,12 @@ class VideoTAADLAA:
                 motion_gate = 0.0
                 
                 # Auto is resolved per frame, after history is available.
-                if preset == "Auto":
-                    if taa.history is not None and taa.history.shape == rgb.shape:
-                        scene_motion = torch.abs(rgb - taa.history).mean().item()
-                    else:
-                        scene_motion = self.auto_default_scene_motion
-
-                    if scene_motion < self.auto_static_motion_threshold:
-                        frame_cfg = AUTO_STATIC
-                    elif scene_motion < self.auto_balanced_motion_threshold:
-                        frame_cfg = AUTO_BALANCED
-                    else:
-                        frame_cfg = AUTO_MOTION
-                else:
-                    frame_cfg = base_cfg
+                frame_cfg = self._resolve_frame_config(
+                    preset,
+                    is_single_image,
+                    rgb,
+                    taa
+                )
 
                 detail_boost = frame_cfg["detail_boost"]
                 edge_boost = frame_cfg["edge_boost"]
@@ -649,16 +662,6 @@ class VideoTAADLAA:
                 edge_sharp_strength = frame_cfg["edge_sharp_strength"]
                 motion_sensitivity = frame_cfg["motion_sensitivity"]
                 preset_jitter_scale = frame_cfg["jitter_scale"]
-
-                if preset == "Detail" and is_single_image:
-                    detail_boost = SINGLE_IMAGE_DETAIL["detail_boost"]
-                    edge_boost = SINGLE_IMAGE_DETAIL["edge_boost"]
-                    temporal_strength = SINGLE_IMAGE_DETAIL["temporal_strength"]
-                    luma_boost_mult = SINGLE_IMAGE_DETAIL["luma_boost_mult"]
-                    saturation_boost_mult = SINGLE_IMAGE_DETAIL["saturation_boost_mult"]
-                    taa_strength = SINGLE_IMAGE_DETAIL["taa_strength"]
-                    dlaa_strength = SINGLE_IMAGE_DETAIL["dlaa_strength"]
-                    edge_sharp_strength = SINGLE_IMAGE_DETAIL["edge_sharp_strength"]
                 
                 fid = taa.frame_id
                 taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
