@@ -22,21 +22,7 @@ try:
     from comfy.utils import ProgressBar
 except ImportError:
     ProgressBar = None
-    
-try:
-    import comfy.utils as comfy_utils
-    from spandrel import ModelLoader, MAIN_REGISTRY
 
-    try:
-        from spandrel_extra_arches import EXTRA_REGISTRY
-        MAIN_REGISTRY.add(*EXTRA_REGISTRY)
-    except Exception:
-        pass
-
-except ImportError:
-    comfy_utils = None
-    ModelLoader = None
-    
 log = logging.getLogger("VideoTAADLAA")
 
 
@@ -512,7 +498,7 @@ class VideoTAADLAA:
         if key in self.net_cache:
             return self.net_cache[key]
         
-        # Model loading can be triggered from parallel executions.
+        # DLAANet Model Loading
         with self._net_lock:
             if key in self.net_cache:
                 return self.net_cache[key]
@@ -551,29 +537,23 @@ class VideoTAADLAA:
         
         
     def _texture_net(self, device):
-        
         if not self.texture_pass_enabled:
-            return None
-
-        if ModelLoader is None:
-            if not self._texture_missing_warned:
-                log.warning("[DLAA] Texture model loader is not available, skipping texture pass.")
-                self._texture_missing_warned = True
             return None
 
         key = str(device)
 
         if key in self.texture_net_cache:
             return self.texture_net_cache[key]
-
+            
+        # DLAANet Texture Model Loading
         with self._net_lock:
             if key in self.texture_net_cache:
                 return self.texture_net_cache[key]
 
             base_path = os.path.dirname(os.path.realpath(__file__))
 
-            pth_path = os.path.join(base_path, "DLAATexture.pth")
             safetensors_path = os.path.join(base_path, "DLAATexture.safetensors")
+            pth_path = os.path.join(base_path, "DLAATexture.pth")
 
             if os.path.exists(safetensors_path):
                 model_path = safetensors_path
@@ -581,32 +561,39 @@ class VideoTAADLAA:
                 model_path = pth_path
             else:
                 if not self._texture_missing_warned:
-                    log.info("[DLAA] Texture pass model not found, skipping texture pass.")
+                    log.info("[DLAA] Texture model not found, skipping texture pass.")
                     self._texture_missing_warned = True
                 return None
 
             try:
+                net = DLAANet().to(device)
+
                 if model_path.endswith(".safetensors"):
-                    state_dict = load_file(model_path, device="cpu")
+                    state_dict = load_file(model_path, device=str(device))
                 else:
-                    state_dict = comfy_utils.load_torch_file(model_path, safe_load=False)
+                    state_dict = torch.load(model_path, map_location=device)
 
                 if isinstance(state_dict, dict):
-                    if "params_ema" in state_dict:
+                    if "state_dict" in state_dict:
+                        state_dict = state_dict["state_dict"]
+                    elif "params_ema" in state_dict:
                         state_dict = state_dict["params_ema"]
                     elif "params" in state_dict:
                         state_dict = state_dict["params"]
-                    elif "state_dict" in state_dict:
-                        state_dict = state_dict["state_dict"]
                     elif "model" in state_dict:
                         state_dict = state_dict["model"]
 
-                net = ModelLoader().load_from_state_dict(state_dict).eval()
-                net = net.to(device)
+                if "jitter_offsets" in state_dict:
+                    del state_dict["jitter_offsets"]
+
+                net.load_state_dict(state_dict, strict=False)
+                net = net.float()
+                net.eval()
 
                 self.texture_net_cache[key] = net
+
                 log.info(
-                    "[DLAA] Loaded texture model: %s", 
+                    "[DLAA] Loaded custom texture model: %s",
                     os.path.basename(model_path)
                 )
 
