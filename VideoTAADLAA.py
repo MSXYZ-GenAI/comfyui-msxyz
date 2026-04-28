@@ -28,6 +28,11 @@ except ImportError:
     from taa import TAAState
 
 try:
+    from .config import NODE_DEFAULTS
+except ImportError:
+    from config import NODE_DEFAULTS
+
+try:
     from .presets import (
         PRESETS,
         AUTO_STATIC,
@@ -67,67 +72,14 @@ class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
         self._net_lock = threading.Lock()
- 
-        self.model_weight = 1.00
-        
-        self.preset_model_weight = PRESET_MODEL_WEIGHT
 
-        self.taa_alpha      = 0.10
-        self.jitter_scale   = 0.20
-        self.edge_threshold = 0.15
-
-        self.dlaa_blend_scale = 1.00
-
-        self.tone_curve_bias      = 0.6
-        self.highlight_pre_blend  = 0.15
-        self.highlight_post_blend = 0.08
-        self.highlight_threshold  = 0.85
-        self.highlight_slope      = 12.0
-
-        self.detail_base_scale = 9.0
-        self.detail_ref_scale  = 0.02
-        self.detail_min_scale  = 6.0
-        self.detail_max_scale  = 12.0
-        self.detail_min_gain   = 0.10
-        self.detail_max_gain   = 0.26
-        self.detail_edge_boost = 0.35
-        self.detail_highlight_suppression = 0.5
-
-        self.edge_sharp_threshold = 0.08
-        self.edge_sharp_slope     = 12.0
-        self.edge_aa_slope = 14.0
-
-        self.motion_gate_scale = 12.0
-        self.jitter_motion_damping = 8.0
-
-        self.detail_dark_luma_start = 0.20
-        self.detail_dark_luma_range = 0.30
-        
-        self.detail_dark_mix_base = 0.6
-        self.detail_dark_mix_scale = 0.4
-
-        self.fine_detail_limit = 0.15
-        self.edge_detail_limit_scale = 0.7
-
-        self.detail_highlight_pre_scale = 0.45
-        self.detail_highlight_post_scale = 0.50
-        self.detail_blend_boost = 1.12
-
-        self.auto_default_scene_motion = 0.02
-        self.auto_static_motion_threshold = 0.015
-        self.auto_balanced_motion_threshold = 0.045
-        
-        self.luma_boost_base = 0.03
-        self.saturation_boost_base = 0.06
-        self.luma_highlight_protect = 0.6
-        self.saturation_highlight_protect = 0.5
-        
-        self.texture_pass_enabled = True
-        self.texture_tile_overlap = 32
-        self.texture_log_interval = 30
         self.texture_net_cache = {}
         self._texture_missing_warned = False
-        
+
+        for name, value in NODE_DEFAULTS.items():
+            setattr(self, name, value)
+
+        self.preset_model_weight = PRESET_MODEL_WEIGHT
         self.texture_presets = TEXTURE_PRESETS
 
     @classmethod
