@@ -1,5 +1,5 @@
 # Video TAA + DLAA
-# v0.1.2
+# v0.2.0
 # MSXYZ
 # Developed with AI-assisted tooling
 
@@ -411,37 +411,37 @@ class VideoTAADLAA:
         self.texture_presets = {
             "Detail": {
                 "enabled": True,
-                "strength": 1.20,
-                "limit": 0.050,
+                "strength": 1.25,
+                "limit": 0.040,
                 "blur_kernel": 7,
-                "dark_base": 0.35,
-                "motion_suppression": 0.70,
-                "highlight_suppression": 0.50,
-                "line_suppression": 0.35,
+                "dark_base": 0.40,
+                "motion_suppression": 0.80,
+                "highlight_suppression": 0.55,
+                "line_suppression": 0.55,
                 "edge_threshold": 0.060,
                 "edge_slope": 18.0,
             },
             "Auto": {
                 "enabled": True,
                 "strength": 0.85,
-                "limit": 0.035,
+                "limit": 0.030,
                 "blur_kernel": 7,
-                "dark_base": 0.45,
-                "motion_suppression": 0.85,
+                "dark_base": 0.35,
+                "motion_suppression": 0.90,
                 "highlight_suppression": 0.60,
-                "line_suppression": 0.45,
+                "line_suppression": 0.60,
                 "edge_threshold": 0.060,
                 "edge_slope": 18.0,
             },
             "Balanced": {
                 "enabled": True,
-                "strength": 0.55,
-                "limit": 0.025,
+                "strength": 0.60,
+                "limit": 0.020,
                 "blur_kernel": 5,
-                "dark_base": 0.55,
-                "motion_suppression": 0.90,
+                "dark_base": 0.30,
+                "motion_suppression": 0.95,
                 "highlight_suppression": 0.65,
-                "line_suppression": 0.50,
+                "line_suppression": 0.65,
                 "edge_threshold": 0.065,
                 "edge_slope": 18.0,
             },
