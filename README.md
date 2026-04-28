@@ -62,11 +62,11 @@ High-quality anti-aliasing nodes for video and image processing in ComfyUI workf
 	<td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td><video src="https://github.com/user-attachments/assets/4109726e-c5db-404b-9c0d-23d49b9641cf" width="500" controls autoplay muted loop>
+    <td width="33%"><video src="https://github.com/user-attachments/assets/4109726e-c5db-404b-9c0d-23d49b9641cf" width="100%" controls autoplay muted loop>
   </video></td>
-    <td><video src="https://github.com/user-attachments/assets/05f8cbb1-9388-44e5-9274-0ee80d6aa37b" width="500" controls autoplay muted loop>
+    <td width="33%"><video src="https://github.com/user-attachments/assets/05f8cbb1-9388-44e5-9274-0ee80d6aa37b" width="100%" controls autoplay muted loop>
   </video></td>
-    <td><video src="https://github.com/user-attachments/assets/c61ebceb-5b15-4bc3-a708-94a692a09a61" width="500" controls autoplay muted loop>
+    <td width="33%"><video src="https://github.com/user-attachments/assets/c61ebceb-5b15-4bc3-a708-94a692a09a61" width="100%" controls autoplay muted loop>
   </video></td>
   </tr>
 </table>
