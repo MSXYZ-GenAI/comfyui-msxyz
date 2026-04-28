@@ -485,6 +485,7 @@ class VideoTAADLAA:
 
         return self.net_cache[key]
         
+        
     def _texture_net(self, device):
         
         if not self.texture_pass_enabled:
