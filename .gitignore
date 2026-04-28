@@ -3,3 +3,7 @@ __pycache__/
 .DS_Store
 venv/
 
+DLAANet_compare.png
+_DLAATexture.pth
+_DLAATexture.safetensors
+epoch_compare.txt
