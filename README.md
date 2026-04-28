@@ -23,6 +23,15 @@ High-quality anti-aliasing nodes for video and image processing in ComfyUI workf
 
 ---
 
+### Models
+
+**DLAANet.safetensors** is the main 1x DLAA refinement model for reducing aliasing artifacts while preserving edge sharpness.
+**DLAATexture.safetensors** is a 1x detail refinement model for restoring fine texture and micro-detail after the DLAA pass.
+
+**Note:** Both models keep the original image resolution and are not ESRGAN models.
+
+---
+
 ## Features
 - **Temporal Anti-Aliasing (TAA):** Blends frame history to reduce flicker and sub-pixel jitter.
 - **Neural Reconstruction:** DLAA-inspired model for high-quality edge restoration.
