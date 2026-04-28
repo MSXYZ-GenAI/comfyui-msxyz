@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from safetensors.torch import load_file
 
+
 try:
     import comfy.model_management as mm
 except ImportError:
@@ -21,6 +22,20 @@ try:
     from comfy.utils import ProgressBar
 except ImportError:
     ProgressBar = None
+    
+try:
+    import comfy.utils as comfy_utils
+    from spandrel import ModelLoader, MAIN_REGISTRY
+
+    try:
+        from spandrel_extra_arches import EXTRA_REGISTRY
+        MAIN_REGISTRY.add(*EXTRA_REGISTRY)
+    except Exception:
+        pass
+
+except ImportError:
+    comfy_utils = None
+    ModelLoader = None
     
 log = logging.getLogger("VideoTAADLAA")
 
@@ -385,7 +400,7 @@ class VideoTAADLAA:
         self.detail_dark_mix_base = 0.6
         self.detail_dark_mix_scale = 0.4
 
-        self.fine_detail_limit = 0.08
+        self.fine_detail_limit = 0.15
         self.edge_detail_limit_scale = 0.7
 
         self.detail_highlight_pre_scale = 0.45
@@ -400,6 +415,19 @@ class VideoTAADLAA:
         self.saturation_boost_base = 0.06
         self.luma_highlight_protect = 0.6
         self.saturation_highlight_protect = 0.5
+        
+        self.texture_pass_enabled = True
+        self.texture_strength = 1.20
+        self.texture_limit = 0.05
+        self.texture_edge_threshold = 0.06
+        self.texture_edge_slope = 18.0
+        self.texture_line_suppression = 0.35
+        self.texture_motion_suppression = 0.70
+        self.texture_highlight_suppression = 0.50
+        self.texture_tile_overlap = 32
+        self.texture_log_interval = 30
+        self.texture_net_cache = {}
+        self._texture_missing_warned = False
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -456,7 +484,80 @@ class VideoTAADLAA:
             self.net_cache[key] = net
 
         return self.net_cache[key]
+        
+    def _texture_net(self, device):
+        
+        if not self.texture_pass_enabled:
+            self.texture_net_cache = {}
+            return None
 
+        if ModelLoader is None:
+            if not self._texture_missing_warned:
+                log.warning("[DLAA] Texture model loader is not available, skipping texture pass.")
+                self._texture_missing_warned = True
+            return None
+
+        key = str(device)
+
+        if key in self.texture_net_cache:
+            return self.texture_net_cache[key]
+
+        with self._net_lock:
+            if key in self.texture_net_cache:
+                return self.texture_net_cache[key]
+
+            base_path = os.path.dirname(os.path.realpath(__file__))
+
+            pth_path = os.path.join(base_path, "DLAATexture.pth")
+            safetensors_path = os.path.join(base_path, "DLAATexture.safetensors")
+
+            if os.path.exists(safetensors_path):
+                model_path = safetensors_path
+            elif os.path.exists(pth_path):
+                model_path = pth_path
+            else:
+                if not self._texture_missing_warned:
+                    log.info("[DLAA] Texture pass model not found, skipping texture pass.")
+                    self._texture_missing_warned = True
+                return None
+
+            try:
+                if model_path.endswith(".safetensors"):
+                    state_dict = load_file(model_path, device="cpu")
+                else:
+                    state_dict = comfy_utils.load_torch_file(model_path, safe_load=False)
+
+                if isinstance(state_dict, dict):
+                    if "params_ema" in state_dict:
+                        state_dict = state_dict["params_ema"]
+                    elif "params" in state_dict:
+                        state_dict = state_dict["params"]
+                    elif "state_dict" in state_dict:
+                        state_dict = state_dict["state_dict"]
+                    elif "model" in state_dict:
+                        state_dict = state_dict["model"]
+
+                net = ModelLoader().load_from_state_dict(state_dict).eval()
+                net = net.to(device)
+
+                self.texture_net_cache[key] = net
+                log.info(
+                    "[DLAA] Loaded texture model: %s",
+                    os.path.basename(model_path)
+                )
+
+            except Exception as e:
+                if not self._texture_missing_warned:
+                    import traceback
+                    log.error(f"[DLAA] Texture model exception:\n{traceback.format_exc()}")
+                    log.warning(
+                        f"[DLAA] Texture model could not be loaded, skipping texture pass: {type(e).__name__}: {e!r}"
+                    )
+                    self._texture_missing_warned = True
+                return None
+
+        return self.texture_net_cache[key]
+        
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
         
         B, C, H, W = x.shape
@@ -586,6 +687,87 @@ class VideoTAADLAA:
 
         return cfg
         
+    def _apply_texture_pass(
+        self,
+        texture_net,
+        dlaa_out,
+        tile_size,
+        motion_gate,
+        dark_mask,
+        highlight_mask,
+        frame_index=None
+    ):
+        if texture_net is None:
+            return dlaa_out
+
+        gen_out = self._tiled_forward(
+            texture_net,
+            dlaa_out,
+            tile_size=tile_size,
+            overlap=self.texture_tile_overlap
+        )
+
+        if gen_out.shape != dlaa_out.shape:
+            log.warning(
+                "[DLAA] Texture model output size does not match input, skipping texture pass."
+            )
+            return dlaa_out
+
+        gray = rgb_luma(dlaa_out)
+
+        edge_x = torch.abs(gray[:, :, :, 1:] - gray[:, :, :, :-1])
+        edge_y = torch.abs(gray[:, :, 1:, :] - gray[:, :, :-1, :])
+
+        edge_x = F.pad(edge_x, (0, 1, 0, 0))
+        edge_y = F.pad(edge_y, (0, 0, 0, 1))
+
+        thin_edge_mask = (edge_x + edge_y).clamp(0.0, 1.0)
+        thin_edge_mask = torch.sigmoid(
+            (thin_edge_mask - self.texture_edge_threshold) * self.texture_edge_slope
+        )
+        thin_edge_mask = F.avg_pool2d(thin_edge_mask, kernel_size=3, stride=1, padding=1)
+
+        # Keep only the model texture
+        gen_blur = F.avg_pool2d(gen_out, kernel_size=7, stride=1, padding=3)
+        hallucinated_texture = gen_out - gen_blur
+
+        raw_gen_delta = hallucinated_texture.abs().mean().item()
+
+        texture_mask = dark_mask.expand_as(dlaa_out[:, 0:1, :, :])
+        texture_mask = texture_mask * (
+            1.0 - highlight_mask * self.texture_highlight_suppression
+        )
+        texture_mask = texture_mask * (
+            1.0 - motion_gate * self.texture_motion_suppression
+        )
+        texture_mask = texture_mask * (
+            1.0 - thin_edge_mask * self.texture_line_suppression
+        )
+
+        hallucinated_texture = hallucinated_texture * texture_mask
+        hallucinated_texture = hallucinated_texture.clamp(
+            -self.texture_limit,
+            self.texture_limit
+        )
+
+        out = dlaa_out + hallucinated_texture * self.texture_strength
+
+        final_texture_delta = (out - dlaa_out).abs().mean().item()
+
+        if (
+            frame_index is not None and
+            self.texture_log_interval > 0 and
+            frame_index % self.texture_log_interval == 0
+        ):
+            log.info(
+                "[DLAA] texture frame=%d raw_delta=%.6f final_delta=%.6f",
+                frame_index,
+                raw_gen_delta,
+                final_texture_delta
+            )
+
+        return torch.clamp(out, 0.0, 1.0)
+        
     def execute(self, images, preset):
     
         if preset == "Sharp":
@@ -608,8 +790,9 @@ class VideoTAADLAA:
         taa = TAAState()
         prev_dlaa_output = None
 
-        net        = self._net(device)
-        out_list   = []
+        net = self._net(device)
+        texture_net = self._texture_net(device) if preset == "Detail" else None
+        out_list = []
 
         delta_sum = 0.0
         delta_count = 0
@@ -835,8 +1018,19 @@ class VideoTAADLAA:
                         micro_limit * self.edge_detail_limit_scale
                     )
                     dlaa_out = dlaa_out + edge_boosted
+
+                    dlaa_out = self._apply_texture_pass(
+                        texture_net=texture_net,
+                        dlaa_out=dlaa_out,
+                        tile_size=current_tile_size,
+                        motion_gate=motion_gate,
+                        dark_mask=dark_mask,
+                        highlight_mask=highlight_mask,
+                        frame_index=i
+                    )
                     
                     tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
+                    
                     dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
                     
                     luma = rgb_luma(dlaa_out)
