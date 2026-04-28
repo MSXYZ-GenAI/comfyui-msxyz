@@ -81,8 +81,8 @@ Recommended starting point:
 
 - Use **Auto** for general footage.
 - Use **Balanced** for stable video cleanup.
-- Use **Sharp** for images, hair, fur, wires, and high-detail edges.
-- Use **Cinematic** for smoother motion and softer temporal blending. 
+- Use **Detail** for images, hair, fur, wires, and high-detail edges.
+- Use **Smooth** for smoother motion and softer temporal blending. 
 
 ---
 
@@ -93,8 +93,8 @@ Built-in presets for common use cases:
 
 - **Auto** — balanced default behavior.
 - **Balanced** — stable anti-aliasing with moderate sharpening.
-- **Sharp** — stronger edge and detail reconstruction.
-- **Cinematic** — smoother temporal blending for softer motion.
+- **Detail** — stronger edge and detail reconstruction.
+- **Smooth** — smoother temporal blending for softer motion.
 
 Start with **Auto**, then adjust based on your content.
 
