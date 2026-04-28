@@ -32,6 +32,7 @@ def rgb_luma(x: torch.Tensor) -> torch.Tensor:
     return r * x[:, 0:1] + g * x[:, 1:2] + b * x[:, 2:3]
 
 
+# Main tuning presets.
 PRESETS = {
     "Balanced": {
         "detail_boost": 1.00,
@@ -80,6 +81,7 @@ PRESETS = {
     },
 }
 
+# Auto mode profiles picked from estimated frame motion.
 AUTO_STATIC = {
     "detail_boost": 1.12,
     "edge_boost": 1.15,
@@ -128,6 +130,7 @@ AUTO_MOTION = {
     "jitter_scale": 0.25,
 }
 
+# Softer Detail settings for single images.
 SINGLE_IMAGE_DETAIL = {
     "detail_boost": 1.30,
     "edge_boost": 1.18,
@@ -139,6 +142,7 @@ SINGLE_IMAGE_DETAIL = {
     "edge_sharp_strength": 0.10,
 }
 
+# Reduces fine detail boost when frame-to-frame motion is detected.
 MOTION_SUPPRESSION = {
     "Detail": {
         "detail": 0.05,
@@ -414,7 +418,8 @@ class VideoTAADLAA:
 
         if key in self.net_cache:
             return self.net_cache[key]
-
+        
+        # Model loading can be triggered from parallel executions.
         with self._net_lock:
             if key in self.net_cache:
                 return self.net_cache[key]
@@ -461,6 +466,7 @@ class VideoTAADLAA:
 
         step = tile_size - overlap * 2
         
+        # Invalid overlap would stall the tile loops.
         if step <= 0:
             raise ValueError(
                 f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
@@ -575,7 +581,8 @@ class VideoTAADLAA:
             blur_radius = 0
         else:
             blur_radius = 0 if preset == "Detail" else 1
-
+        
+        # Temporal state belongs to this execution only.
         taa = TAAState()
         prev_dlaa_output = None
 
@@ -611,7 +618,8 @@ class VideoTAADLAA:
                 rgb = img[:, :3]
 
                 motion_gate = 0.0
-
+                
+                # Auto is resolved per frame, after history is available.
                 if preset == "Auto":
                     if taa.history is not None and taa.history.shape == rgb.shape:
                         scene_motion = torch.abs(rgb - taa.history).mean().item()
@@ -653,7 +661,8 @@ class VideoTAADLAA:
                 
                 fid = taa.frame_id
                 taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
-
+                
+                # Jitter is damped on motion to avoid shimmer.
                 adaptive_jitter_scale = preset_jitter_scale
 
                 if taa.history is not None and taa.history.shape == rgb.shape:
@@ -726,13 +735,15 @@ class VideoTAADLAA:
                     if dlaa_out is None:
                         raise RuntimeError("DLAA tiled inference failed.")
                     
+                    # Keep the model pass from shifting overall brightness.
                     dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
                     rgb_mean  = rgb.mean(dim=(1,2,3), keepdim=True)
                     dlaa_out = dlaa_out - dlaa_mean + rgb_mean
                     
 
                     preset_model_weight = self.preset_model_weight.get(preset, 1.00)
-
+                    
+                    # The network is used as a residual refiner, not a full replacement.
                     model_delta = dlaa_out - rgb
                     model_delta_value = model_delta.abs().mean().item()
 
@@ -751,6 +762,7 @@ class VideoTAADLAA:
                     luma = rgb_luma(dlaa_out)
                     highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
                     
+                    # Bright areas are easy to overcook, so pull them back early.
                     highlight_pre_blend = self.highlight_pre_blend * (
                         self.detail_highlight_pre_scale if preset == "Detail" else 1.0
                     )
@@ -763,6 +775,7 @@ class VideoTAADLAA:
                     edge_boost *= (1.0 - motion_gate * motion_cfg["edge"])
                     micro_limit *= (1.0 - motion_gate * motion_cfg["micro"])
                     
+                    # Small residual detail pass after the model output.
                     local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
                     fine_detail_rgb = dlaa_out - local_avg_rgb
 
@@ -840,7 +853,8 @@ class VideoTAADLAA:
                     if prev_dlaa_output is not None:
                         if prev_dlaa_output.shape != dlaa_out.shape:
                             prev_dlaa_output = None
-
+                            
+                    # Final temporal pass; Detail may keep this disabled.
                     dlaa_out = self._temporal_refine(
                         dlaa_out,
                         prev_dlaa_output,
