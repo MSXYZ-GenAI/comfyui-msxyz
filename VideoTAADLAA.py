@@ -396,9 +396,10 @@ class VideoTAADLAA:
         self.auto_static_motion_threshold = 0.015
         self.auto_balanced_motion_threshold = 0.045
         
-        self.luma_boost_base        = 0.03
-        self.saturation_boost_base  = 0.06
+        self.luma_boost_base = 0.03
+        self.saturation_boost_base = 0.06
         self.luma_highlight_protect = 0.6
+        self.saturation_highlight_protect = 0.5
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -841,7 +842,11 @@ class VideoTAADLAA:
                     
 
                     mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
-                    saturation_boost = self.saturation_boost_base * saturation_boost_mult * (1.0 - highlight_mask * 0.5)
+                    saturation_boost = (
+                        self.saturation_boost_base *
+                        saturation_boost_mult *
+                        (1.0 - highlight_mask * self.saturation_highlight_protect)
+                    )
                     dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
                     
                     highlight_post_blend = self.highlight_post_blend * (
