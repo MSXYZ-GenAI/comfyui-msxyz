@@ -16,11 +16,16 @@ try:
     import comfy.model_management as mm
 except ImportError:
     mm = None
+    
+try:
+    from comfy.utils import ProgressBar
+except ImportError:
+    ProgressBar = None
+    
 log = logging.getLogger("VideoTAADLAA")
 
 
 LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
-
 
 def rgb_luma(x: torch.Tensor) -> torch.Tensor:
     r, g, b = LUMA_WEIGHTS
@@ -603,6 +608,8 @@ class VideoTAADLAA:
         base_motion_sensitivity = motion_sensitivity
         base_jitter_scale = preset_jitter_scale
         
+        progress = ProgressBar(B) if ProgressBar is not None else None
+        
         with torch.inference_mode():
             for i in range(B):
             
@@ -859,7 +866,10 @@ class VideoTAADLAA:
                 rgb = torch.clamp(rgb, 0.0, 1.0)
 
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-    
+
+                if progress is not None:
+                    progress.update(1)
+
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
 
