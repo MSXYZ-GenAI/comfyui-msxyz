@@ -606,7 +606,7 @@ class VideoTAADLAA:
 
                 self.texture_net_cache[key] = net
                 log.info(
-                    "[DLAA] Loaded texture model: %s",
+                    "[DLAA] Loaded texture model: %s", 
                     os.path.basename(model_path)
                 )
 
