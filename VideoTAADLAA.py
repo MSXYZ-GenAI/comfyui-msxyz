@@ -128,6 +128,30 @@ AUTO_MOTION = {
     "jitter_scale": 0.25,
 }
 
+SINGLE_IMAGE_DETAIL = {
+    "detail_boost": 1.30,
+    "edge_boost": 1.18,
+    "temporal_strength": 0.00,
+    "luma_boost_mult": 1.04,
+    "saturation_boost_mult": 1.01,
+    "taa_strength": 0.08,
+    "dlaa_strength": 1.12,
+    "edge_sharp_strength": 0.10,
+}
+
+MOTION_SUPPRESSION = {
+    "Detail": {
+        "detail": 0.05,
+        "edge": 0.08,
+        "micro": 0.18,
+    },
+    "Default": {
+        "detail": 0.20,
+        "edge": 0.15,
+        "micro": 0.20,
+    },
+}
+
 
 class DLAANet(nn.Module):
     """DLAA network"""
@@ -313,9 +337,6 @@ class VideoTAADLAA:
     def __init__(self):
         self.net_cache = {}
         self._net_lock = threading.Lock()
-        self.taa       = TAAState()
-        
-        self._prev_dlaa_output = None
  
         self.model_weight = 1.00
         
@@ -356,6 +377,20 @@ class VideoTAADLAA:
 
         self.detail_dark_luma_start = 0.20
         self.detail_dark_luma_range = 0.30
+        
+        self.detail_dark_mix_base = 0.6
+        self.detail_dark_mix_scale = 0.4
+
+        self.fine_detail_limit = 0.08
+        self.edge_detail_limit_scale = 0.7
+
+        self.detail_highlight_pre_scale = 0.45
+        self.detail_highlight_post_scale = 0.50
+        self.detail_blend_boost = 1.12
+
+        self.auto_default_scene_motion = 0.02
+        self.auto_static_motion_threshold = 0.015
+        self.auto_balanced_motion_threshold = 0.045
         
         self.luma_boost_base        = 0.03
         self.saturation_boost_base  = 0.06
@@ -531,45 +566,18 @@ class VideoTAADLAA:
         device = mm.get_torch_device() if mm else \
                  torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        if preset == "Auto":
-            cfg = AUTO_BALANCED.copy()
-        else:
-            cfg = PRESETS.get(preset, PRESETS["Balanced"]).copy()
-
-        detail_boost = cfg["detail_boost"]
-        edge_boost = cfg["edge_boost"]
-        temporal_strength = cfg["temporal_strength"]
-        micro_limit = cfg["micro_limit"]
-        luma_boost_mult = cfg["luma_boost_mult"]
-        saturation_boost_mult = cfg["saturation_boost_mult"]
-        motion_threshold = cfg["motion_threshold"]
-        taa_strength = cfg["taa_strength"]
-        dlaa_strength = cfg["dlaa_strength"]
-        tone_strength = cfg["tone_strength"]
-        edge_sharp_strength = cfg["edge_sharp_strength"]
-        motion_sensitivity = cfg["motion_sensitivity"]
-        preset_jitter_scale = cfg["jitter_scale"]
+        base_cfg = None if preset == "Auto" else PRESETS.get(preset, PRESETS["Balanced"]).copy()
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
-
-        if preset == "Detail" and is_single_image:
-            detail_boost = 1.30
-            edge_boost = 1.18
-            temporal_strength = 0.00
-            luma_boost_mult = 1.04
-            saturation_boost_mult = 1.01
-            taa_strength = 0.08
-            dlaa_strength = 1.12
-            edge_sharp_strength = 0.10
             
         if is_single_image:
             blur_radius = 0
         else:
             blur_radius = 0 if preset == "Detail" else 1
 
-        self.taa.reset()
-        self._prev_dlaa_output = None
+        taa = TAAState()
+        prev_dlaa_output = None
 
         net        = self._net(device)
         out_list   = []
@@ -593,79 +601,63 @@ class VideoTAADLAA:
             tile_step = tile_size - 64
             tile_count = ((H + tile_step - 1) // tile_step) * ((W + tile_step - 1) // tile_step)
             log.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
-        
-        base_detail_boost = detail_boost
-        base_edge_boost = edge_boost
-        base_temporal_strength = temporal_strength
-        base_micro_limit = micro_limit
-        base_luma_boost_mult = luma_boost_mult
-        base_saturation_boost_mult = saturation_boost_mult
-        base_motion_threshold = motion_threshold
-        base_taa_strength = taa_strength
-        base_dlaa_strength = dlaa_strength
-        base_tone_strength = tone_strength
-        base_edge_sharp_strength = edge_sharp_strength
-        base_motion_sensitivity = motion_sensitivity
-        base_jitter_scale = preset_jitter_scale
-        
+            
         progress = ProgressBar(B) if ProgressBar is not None else None
         
         with torch.inference_mode():
             for i in range(B):
             
-                detail_boost = base_detail_boost
-                edge_boost = base_edge_boost
-                temporal_strength = base_temporal_strength
-                micro_limit = base_micro_limit
-                luma_boost_mult = base_luma_boost_mult
-                saturation_boost_mult = base_saturation_boost_mult
-                motion_threshold = base_motion_threshold
-                taa_strength = base_taa_strength
-                dlaa_strength = base_dlaa_strength
-                tone_strength = base_tone_strength
-                edge_sharp_strength = base_edge_sharp_strength
-                motion_sensitivity = base_motion_sensitivity
-                preset_jitter_scale = base_jitter_scale
-                
                 img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
                 rgb = img[:, :3]
-                
-                motion_gate = 0.0 
-                
+
+                motion_gate = 0.0
+
                 if preset == "Auto":
-                    if self.taa.history is not None and self.taa.history.shape == rgb.shape:
-                        scene_motion = torch.abs(rgb - self.taa.history).mean().item()
+                    if taa.history is not None and taa.history.shape == rgb.shape:
+                        scene_motion = torch.abs(rgb - taa.history).mean().item()
                     else:
-                        scene_motion = 0.02
+                        scene_motion = self.auto_default_scene_motion
 
-                    if scene_motion < 0.015:
-                        auto_cfg = AUTO_STATIC
-                    elif scene_motion < 0.045:
-                        auto_cfg = AUTO_BALANCED
+                    if scene_motion < self.auto_static_motion_threshold:
+                        frame_cfg = AUTO_STATIC
+                    elif scene_motion < self.auto_balanced_motion_threshold:
+                        frame_cfg = AUTO_BALANCED
                     else:
-                        auto_cfg = AUTO_MOTION
+                        frame_cfg = AUTO_MOTION
+                else:
+                    frame_cfg = base_cfg
 
-                    detail_boost = auto_cfg["detail_boost"]
-                    edge_boost = auto_cfg["edge_boost"]
-                    temporal_strength = auto_cfg["temporal_strength"]
-                    micro_limit = auto_cfg["micro_limit"]
-                    luma_boost_mult = auto_cfg["luma_boost_mult"]
-                    saturation_boost_mult = auto_cfg["saturation_boost_mult"]
-                    motion_threshold = auto_cfg["motion_threshold"]
-                    taa_strength = auto_cfg["taa_strength"]
-                    dlaa_strength = auto_cfg["dlaa_strength"]
-                    tone_strength = auto_cfg["tone_strength"]
-                    edge_sharp_strength = auto_cfg["edge_sharp_strength"]
-                    motion_sensitivity = auto_cfg["motion_sensitivity"]
-                    preset_jitter_scale = auto_cfg["jitter_scale"]
+                detail_boost = frame_cfg["detail_boost"]
+                edge_boost = frame_cfg["edge_boost"]
+                temporal_strength = frame_cfg["temporal_strength"]
+                micro_limit = frame_cfg["micro_limit"]
+                luma_boost_mult = frame_cfg["luma_boost_mult"]
+                saturation_boost_mult = frame_cfg["saturation_boost_mult"]
+                motion_threshold = frame_cfg["motion_threshold"]
+                taa_strength = frame_cfg["taa_strength"]
+                dlaa_strength = frame_cfg["dlaa_strength"]
+                tone_strength = frame_cfg["tone_strength"]
+                edge_sharp_strength = frame_cfg["edge_sharp_strength"]
+                motion_sensitivity = frame_cfg["motion_sensitivity"]
+                preset_jitter_scale = frame_cfg["jitter_scale"]
+
+                if preset == "Detail" and is_single_image:
+                    detail_boost = SINGLE_IMAGE_DETAIL["detail_boost"]
+                    edge_boost = SINGLE_IMAGE_DETAIL["edge_boost"]
+                    temporal_strength = SINGLE_IMAGE_DETAIL["temporal_strength"]
+                    luma_boost_mult = SINGLE_IMAGE_DETAIL["luma_boost_mult"]
+                    saturation_boost_mult = SINGLE_IMAGE_DETAIL["saturation_boost_mult"]
+                    taa_strength = SINGLE_IMAGE_DETAIL["taa_strength"]
+                    dlaa_strength = SINGLE_IMAGE_DETAIL["dlaa_strength"]
+                    edge_sharp_strength = SINGLE_IMAGE_DETAIL["edge_sharp_strength"]
                 
-                fid = self.taa.frame_id
-                self.taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
+                fid = taa.frame_id
+                taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
 
                 adaptive_jitter_scale = preset_jitter_scale
 
-                if self.taa.history is not None and self.taa.history.shape == rgb.shape:
-                    motion_estimate = torch.abs(rgb - self.taa.history).mean()
+                if taa.history is not None and taa.history.shape == rgb.shape:
+                    motion_estimate = torch.abs(rgb - taa.history).mean()
                     motion_gate = torch.clamp(
                         motion_estimate * self.motion_gate_scale,
                         0.0,
@@ -681,7 +673,7 @@ class VideoTAADLAA:
                 
                 rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
                 
-                taa_out = self.taa.update(rgb, self.taa_alpha, motion_sensitivity)
+                taa_out = taa.update(rgb, self.taa_alpha, motion_sensitivity)
                 rgb     = torch.lerp(rgb, taa_out, taa_strength)
 
                 if dlaa_strength > 0:
@@ -759,18 +751,17 @@ class VideoTAADLAA:
                     luma = rgb_luma(dlaa_out)
                     highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
                     
-                    highlight_pre_blend = self.highlight_pre_blend * (0.45 if preset == "Detail" else 1.0)
+                    highlight_pre_blend = self.highlight_pre_blend * (
+                        self.detail_highlight_pre_scale if preset == "Detail" else 1.0
+                    )
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
-                    if preset == "Detail":
-                        detail_boost *= (1.0 - motion_gate * 0.05)
-                        edge_boost *= (1.0 - motion_gate * 0.08)
-                        micro_limit *= (1.0 - motion_gate * 0.18)
-                    else:
-                        detail_boost *= (1.0 - motion_gate * 0.20)
-                        edge_boost *= (1.0 - motion_gate * 0.15)
-                        micro_limit *= (1.0 - motion_gate * 0.20)
+                    motion_cfg = MOTION_SUPPRESSION["Detail"] if preset == "Detail" else MOTION_SUPPRESSION["Default"]
+
+                    detail_boost *= (1.0 - motion_gate * motion_cfg["detail"])
+                    edge_boost *= (1.0 - motion_gate * motion_cfg["edge"])
+                    micro_limit *= (1.0 - motion_gate * motion_cfg["micro"])
                     
                     local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
                     fine_detail_rgb = dlaa_out - local_avg_rgb
@@ -784,7 +775,9 @@ class VideoTAADLAA:
                             0.0,
                             1.0
                         )
-                        micro_limit = micro_limit * (0.6 + 0.4 * dark_mask)
+                        micro_limit = micro_limit * (
+                            self.detail_dark_mix_base + self.detail_dark_mix_scale * dark_mask
+                        )
                     else:
                         dark_mask = 1.0
 
@@ -794,7 +787,7 @@ class VideoTAADLAA:
                     fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
                     
 
-                    fine_detail = fine_detail.clamp(-0.08, 0.08)
+                    fine_detail = fine_detail.clamp(-self.fine_detail_limit, self.fine_detail_limit)
 
                     local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
                     global_detail = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
@@ -820,7 +813,10 @@ class VideoTAADLAA:
                     edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
 
                     edge_boosted = edge_detail * edge_sharp_strength * edge_boost * dark_mask
-                    edge_boosted = edge_boosted.clamp(-micro_limit * 0.7, micro_limit * 0.7)
+                    edge_boosted = edge_boosted.clamp(
+                        -micro_limit * self.edge_detail_limit_scale,
+                        micro_limit * self.edge_detail_limit_scale
+                    )
                     dlaa_out = dlaa_out + edge_boosted
                     
                     tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
@@ -835,22 +831,24 @@ class VideoTAADLAA:
                     saturation_boost = self.saturation_boost_base * saturation_boost_mult * (1.0 - highlight_mask * 0.5)
                     dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
                     
-                    highlight_post_blend = self.highlight_post_blend * (0.50 if preset == "Detail" else 1.0)
+                    highlight_post_blend = self.highlight_post_blend * (
+                        self.detail_highlight_post_scale if preset == "Detail" else 1.0
+                    )
                     dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
 
-                    if self._prev_dlaa_output is not None:
-                        if self._prev_dlaa_output.shape != dlaa_out.shape:
-                            self._prev_dlaa_output = None
+                    if prev_dlaa_output is not None:
+                        if prev_dlaa_output.shape != dlaa_out.shape:
+                            prev_dlaa_output = None
 
                     dlaa_out = self._temporal_refine(
                         dlaa_out,
-                        self._prev_dlaa_output,
+                        prev_dlaa_output,
                         strength=temporal_strength,
                         motion_threshold=motion_threshold
                     )
 
-                    self._prev_dlaa_output = dlaa_out.detach()
+                    prev_dlaa_output = dlaa_out.detach()
 
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
@@ -859,7 +857,7 @@ class VideoTAADLAA:
                     blend_weight = dlaa_strength * self.dlaa_blend_scale
 
                     if preset in ["Detail"]:
-                        blend_weight = min(blend_weight * 1.12, 1.0)
+                        blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
                         
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
                 
