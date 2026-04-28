@@ -16,7 +16,12 @@ try:
     from .model import DLAANet
 except ImportError:
     from model import DLAANet
-    
+
+try:
+    from .utils import rgb_luma
+except ImportError:
+    from utils import rgb_luma
+
 try:
     from .presets import (
         PRESETS,
@@ -44,20 +49,13 @@ try:
     import comfy.model_management as mm
 except ImportError:
     mm = None
-    
+
 try:
     from comfy.utils import ProgressBar
 except ImportError:
     ProgressBar = None
 
 log = logging.getLogger("VideoTAADLAA")
-
-
-LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
-
-def rgb_luma(x: torch.Tensor) -> torch.Tensor:
-    r, g, b = LUMA_WEIGHTS
-    return r * x[:, 0:1] + g * x[:, 1:2] + b * x[:, 2:3]
 
 
 class TAAState:
