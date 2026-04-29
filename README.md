@@ -111,14 +111,11 @@ Start with **Auto**, then adjust based on your content.
 
 ## Installation
 
-Recommended: Install via ComfyUI Manager.
+1. Install via **ComfyUI Manager** (Search for "Anti-Aliasing Pack") or clone this repo into your `custom_nodes` folder.
+2. **Note:** The required models will be automatically downloaded when you first run the node. 
+3. No additional Python dependencies (requirements) are required.
 
-Manual installation:
-
-```bash
-cd ComfyUI/custom_nodes/
-git clone https://github.com/MSXYZ-GenAI/comfyui-msxyz.git
-```
+---
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
