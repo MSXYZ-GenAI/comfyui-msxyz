@@ -153,7 +153,7 @@ class VideoTAADLAA:
             net.eval()
 
             n_params = sum(p.numel() for p in net.parameters())
-            log.info(f"[DLAA] Model parameters: {n_params/1e6:.2f}M")
+            log.info(f"[DLAA] Main model parameters: {n_params / 1e6:.2f}M")
 
             self.net_cache[key] = net
 
@@ -214,9 +214,12 @@ class VideoTAADLAA:
                 net = net.float()
                 net.eval()
 
+                n_params = sum(p.numel() for p in net.parameters())
+
                 self.texture_net_cache[key] = net
 
                 log.info("[DLAA] Loaded %s", os.path.basename(model_path))
+                log.info(f"[DLAA] Texture model parameters: {n_params / 1e6:.2f}M")
 
             except Exception as e:
                 if not self._texture_missing_warned:
