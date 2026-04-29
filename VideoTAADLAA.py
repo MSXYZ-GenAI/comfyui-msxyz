@@ -393,6 +393,58 @@ class VideoTAADLAA:
         refined = current * (1.0 - blend_mask) + previous * blend_mask
         return refined.clamp(0.0, 1.0)
         
+    def _stabilize_fine_detail(
+        self,
+        current,
+        previous,
+        strength,
+        motion_threshold,
+    ):
+        if previous is None:
+            return current
+
+        if previous.shape != current.shape:
+            return current
+
+        if strength <= 1e-5:
+            return current
+
+        current_base = F.avg_pool2d(current, 3, stride=1, padding=1)
+        previous_base = F.avg_pool2d(previous, 3, stride=1, padding=1)
+
+        current_detail = current - current_base
+        previous_detail = previous - previous_base
+
+        current_luma = rgb_luma(current)
+        previous_luma = rgb_luma(previous)
+
+        motion = torch.abs(current_luma - previous_luma)
+        stable_area = 1.0 - torch.clamp(
+            motion / motion_threshold,
+            0.0,
+            1.0,
+        )
+
+        detail_energy = rgb_luma(current_detail.abs())
+
+        line_mask = torch.sigmoid(
+            (detail_energy - self.detail_shimmer_threshold) *
+            self.detail_shimmer_slope
+        )
+
+        blend_mask = (line_mask * stable_area * strength).clamp(
+            0.0,
+            self.detail_shimmer_max_blend,
+        )
+
+        stabilized_detail = torch.lerp(
+            current_detail,
+            previous_detail,
+            blend_mask,
+        )
+
+        return torch.clamp(current_base + stabilized_detail, 0.0, 1.0)
+        
     def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
         # Auto uses frame history
         if preset == "Auto":
@@ -923,6 +975,14 @@ class VideoTAADLAA:
         if prev_dlaa_output is not None:
             if prev_dlaa_output.shape != dlaa_out.shape:
                 prev_dlaa_output = None
+
+        if preset == "Detail":
+            dlaa_out = self._stabilize_fine_detail(
+                dlaa_out,
+                prev_dlaa_output,
+                strength=self.detail_shimmer_strength,
+                motion_threshold=motion_threshold,
+            )
 
         # final temporal blend
         dlaa_out = self._temporal_refine(
