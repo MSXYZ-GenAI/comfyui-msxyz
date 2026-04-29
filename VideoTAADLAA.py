@@ -1137,6 +1137,14 @@ class VideoTAADLAA:
 
         B, H, W, C = images.shape
         is_single_image = (B == 1)
+
+        if (
+            preset == "Detail" and
+            is_single_image and
+            abs(texture_intensity - 1.00) < 1e-6
+        ):
+            texture_intensity = self.single_image_detail_texture_intensity
+
         blur_radius = self._frame_blur_radius(preset, is_single_image)
         edge_aa_strength = self._frame_edge_aa_strength(
             preset,
