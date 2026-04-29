@@ -102,14 +102,15 @@ AUTO_MOTION = {
 
 
 SINGLE_IMAGE_DETAIL = {
-    "detail_boost": 1.30,
-    "edge_boost": 1.18,
+    "detail_boost": 0.90,
+    "edge_boost": 0.72,
     "temporal_strength": 0.00,
     "luma_boost_mult": 1.04,
     "saturation_boost_mult": 1.01,
     "taa_strength": 0.08,
-    "dlaa_strength": 1.12,
-    "edge_sharp_strength": 0.10,
+    "dlaa_strength": 0.92,
+    "edge_sharp_strength": 0.75,
+    "tone_strength": 0.85,
 }
 
 
