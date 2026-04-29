@@ -74,4 +74,10 @@ NODE_DEFAULTS = {
     "detail_shimmer_max_blend": 0.35,
     "detail_edge_aa_strength": 0.38,
     "photo_edge_aa_strength": 0.25,
+    
+    # Fine-line AA for thin details
+    "detail_fine_line_aa_strength": 0.45,
+    "detail_fine_line_dark_threshold": 0.34,
+    "detail_fine_line_edge_threshold": 0.075,
+    "detail_fine_line_blur_strength": 0.50,
 }
