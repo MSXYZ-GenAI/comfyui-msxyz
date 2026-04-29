@@ -1,7 +1,7 @@
 # Video TAA + DLAA
 # v0.2.0
 # MSXYZ
-# Developed with AI-assisted tooling
+# AI-assisted
 
 
 import os
@@ -122,7 +122,7 @@ class VideoTAADLAA:
         if key in self.net_cache:
             return self.net_cache[key]
         
-        # DLAANet Model Loading
+        # main model
         with self._net_lock:
             if key in self.net_cache:
                 return self.net_cache[key]
@@ -266,7 +266,7 @@ class VideoTAADLAA:
 
         step = tile_size - overlap * 2
         
-        # Invalid overlap would stall the tile loops.
+        # avoid stuck tiling
         if step <= 0:
             raise ValueError(
                 f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
@@ -391,7 +391,7 @@ class VideoTAADLAA:
         return refined.clamp(0.0, 1.0)
         
     def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
-        # Auto is resolved per frame, after history is available.
+        # Auto uses frame history
         if preset == "Auto":
             if taa.history is not None and taa.history.shape == rgb.shape:
                 scene_motion = torch.abs(rgb - taa.history).mean().item()
@@ -464,7 +464,7 @@ class VideoTAADLAA:
         )
         thin_edge_mask = F.avg_pool2d(thin_edge_mask, kernel_size=3, stride=1, padding=1)
 
-        # Keep only the model texture
+        # isolate texture residual
         blur_kernel = texture_cfg["blur_kernel"]
         gen_blur = F.avg_pool2d(gen_out, kernel_size=blur_kernel, stride=1, padding=blur_kernel // 2)
         hallucinated_texture = gen_out - gen_blur
@@ -655,7 +655,7 @@ class VideoTAADLAA:
         else:
             taa.frame_id = fid + 1
         
-        # Jitter is damped on motion to avoid shimmer.
+        # damp jitter on motion
         adaptive_jitter_scale = preset_jitter_scale
 
         if taa.history is not None and taa.history.shape == rgb.shape:
@@ -736,14 +736,14 @@ class VideoTAADLAA:
         debug_stats,
         frame_index,
     ):
-        # Keep the model pass from shifting overall brightness.
+        # keep brightness stable
         dlaa_mean = dlaa_out.mean(dim=(1, 2, 3), keepdim=True)
         rgb_mean = rgb.mean(dim=(1, 2, 3), keepdim=True)
         dlaa_out = dlaa_out - dlaa_mean + rgb_mean
 
         preset_model_weight = self.preset_model_weight.get(preset, 1.00)
         
-        # The network is used as a residual refiner, not a full replacement.
+        # residual model pass
         model_delta = dlaa_out - rgb
 
         model_delta_value = None
@@ -765,7 +765,7 @@ class VideoTAADLAA:
         luma = rgb_luma(dlaa_out)
         highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
         
-        # Bright areas are easy to overcook, so pull them back early.
+        # protect highlights early
         highlight_pre_blend = self.highlight_pre_blend * (
             self.detail_highlight_pre_scale if preset == "Detail" else 1.0
         )
@@ -803,7 +803,7 @@ class VideoTAADLAA:
         highlight_mask,
     ):
         
-        # Small residual detail pass after the model output.
+        # local detail pass
         local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
         fine_detail_rgb = dlaa_out - local_avg_rgb
 
@@ -921,7 +921,7 @@ class VideoTAADLAA:
             if prev_dlaa_output.shape != dlaa_out.shape:
                 prev_dlaa_output = None
 
-        # Final temporal pass; Detail may keep this disabled.
+        # final temporal blend
         dlaa_out = self._temporal_refine(
             dlaa_out,
             prev_dlaa_output,
@@ -1059,7 +1059,7 @@ class VideoTAADLAA:
         is_single_image = (B == 1)
         blur_radius = self._frame_blur_radius(preset, is_single_image)
 
-        # Temporal state belongs to this execution only.
+        # per-run temporal state
         taa = TAAState()
         prev_dlaa_output = None
 
@@ -1078,7 +1078,7 @@ class VideoTAADLAA:
         progress = ProgressBar(B) if ProgressBar is not None else None
 
         with torch.inference_mode():
-            # TAA needs frame order.
+
             for i in range(B):
                 rgb = self._load_frame(images, i, device)
 
