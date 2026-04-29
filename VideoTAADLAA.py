@@ -38,7 +38,6 @@ try:
         AUTO_STATIC,
         AUTO_BALANCED,
         AUTO_MOTION,
-        SINGLE_IMAGE_DETAIL,
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
@@ -49,7 +48,6 @@ except ImportError:
         AUTO_STATIC,
         AUTO_BALANCED,
         AUTO_MOTION,
-        SINGLE_IMAGE_DETAIL,
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
@@ -464,9 +462,6 @@ class VideoTAADLAA:
             frame_cfg = PRESETS.get(preset, PRESETS["Balanced"])
 
         cfg = frame_cfg.copy()
-
-        # if preset == "Detail" and is_single_image:
-        #     cfg.update(SINGLE_IMAGE_DETAIL)
 
         return cfg
         

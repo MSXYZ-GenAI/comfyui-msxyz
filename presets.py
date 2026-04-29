@@ -101,15 +101,6 @@ AUTO_MOTION = {
 }
 
 
-SINGLE_IMAGE_DETAIL = {
-    "detail_boost": 1.00,
-    "edge_boost": 0.90,
-    "edge_sharp_strength": 0.90,
-    "dlaa_strength": 1.00,
-    "tone_strength": 0.65,
-}
-
-
 MOTION_SUPPRESSION = {
     "Detail": {
         "detail": 0.05,
