@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+*.pth
 .DS_Store
 venv/
 
