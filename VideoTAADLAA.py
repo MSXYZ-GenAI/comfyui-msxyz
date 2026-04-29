@@ -367,6 +367,57 @@ class VideoTAADLAA:
 
         return x * (1.0 - mask) + blurred * mask
         
+    def _fine_line_aa(self, x, net, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        luma = rgb_luma(x)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        dark_mask = torch.sigmoid(
+            (self.detail_fine_line_dark_threshold - luma) * 12.0
+        )
+
+        edge_mask = torch.sigmoid(
+            (edge - self.detail_fine_line_edge_threshold) * self.edge_aa_slope
+        )
+
+        local_avg = F.avg_pool2d(x, 3, stride=1, padding=1)
+        fine_detail = rgb_luma((x - local_avg).abs())
+
+        detail_mask = torch.sigmoid(
+            (fine_detail - self.detail_shimmer_threshold) *
+            self.detail_shimmer_slope
+        )
+
+        line_mask = (dark_mask * edge_mask * detail_mask).clamp(0.0, 1.0)
+
+        blurred = F.avg_pool2d(
+            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        blur_strength = max(
+            0.0,
+            min(float(self.detail_fine_line_blur_strength), 1.0),
+        )
+
+        aa_target = torch.lerp(
+            x,
+            blurred,
+            blur_strength,
+        )
+
+        blend = (line_mask * strength).clamp(0.0, 1.0)
+
+        return torch.lerp(x, aa_target, blend).clamp(0.0, 1.0)
+    
     def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
         if previous is None:
             return current
@@ -1087,6 +1138,13 @@ class VideoTAADLAA:
             edge_sharp_strength,
             highlight_mask,
         )
+        
+        if preset == "Detail":
+            dlaa_out = self._fine_line_aa(
+                dlaa_out,
+                net,
+                self.detail_fine_line_aa_strength,
+            )
 
         dlaa_out = self._apply_texture_pass(
             texture_net=texture_net,
