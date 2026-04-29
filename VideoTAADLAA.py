@@ -74,6 +74,7 @@ class VideoTAADLAA:
         self._net_lock = threading.Lock()
 
         self.texture_net_cache = {}
+        self._texture_lock = threading.Lock()
         self._texture_missing_warned = False
 
         for name, value in NODE_DEFAULTS.items():
@@ -169,7 +170,7 @@ class VideoTAADLAA:
             return self.texture_net_cache[key]
             
         # DLAANet Texture Model Loading
-        with self._net_lock:
+        with self._texture_lock:
             if key in self.texture_net_cache:
                 return self.texture_net_cache[key]
 
@@ -390,6 +391,7 @@ class VideoTAADLAA:
         return refined.clamp(0.0, 1.0)
         
     def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
+        # Auto is resolved per frame, after history is available.
         if preset == "Auto":
             if taa.history is not None and taa.history.shape == rgb.shape:
                 scene_motion = torch.abs(rgb - taa.history).mean().item()
@@ -517,356 +519,627 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def execute(self, images, preset, detail_intensity=1.00, texture_intensity=1.00, motion_stability=1.00):
-    
+    def _normalize_run_inputs(
+        self,
+        preset,
+        detail_intensity,
+        texture_intensity,
+        motion_stability,
+    ):
         if preset == "Sharp":
             preset = "Detail"
         elif preset == "Cinematic":
             preset = "Smooth"
-        
+
         detail_intensity = max(0.0, min(float(detail_intensity), 2.0))
         texture_intensity = max(0.0, min(float(texture_intensity), 2.0))
         motion_stability = max(0.5, min(float(motion_stability), 2.0))
-    
-        device = mm.get_torch_device() if mm else \
-                 torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        return preset, detail_intensity, texture_intensity, motion_stability
+
+    def _get_device(self):
+        if mm is not None:
+            return mm.get_torch_device()
+
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _frame_blur_radius(self, preset, is_single_image):
+        if is_single_image:
+            return 0
+
+        return 0 if preset == "Detail" else 1
+
+    def _vram_mb(self, device):
+        try:
+            torch_device = torch.device(device)
+        except Exception:
+            return 0
+
+        if torch_device.type != "cuda" or not torch.cuda.is_available():
+            return 0
+
+        try:
+            device_index = torch_device.index
+
+            if device_index is None:
+                device_index = torch.cuda.current_device()
+
+            return torch.cuda.get_device_properties(device_index).total_memory // (1024 * 1024)
+        except Exception:
+            return 0
+
+    def _tile_size_for_vram(self, vram_mb):
+        if vram_mb <= 8192:
+            return 512
+
+        return 1024
+
+    def _log_tiling(self, height, width, tile_size):
+        if height <= tile_size and width <= tile_size:
+            return
+
+        tile_step = tile_size - 64
+        tile_count = ((height + tile_step - 1) // tile_step) * ((width + tile_step - 1) // tile_step)
+        log.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
+
+    def _load_frame(self, images, frame_index, device):
+        img = images[frame_index:frame_index + 1].to(device).permute(0, 3, 1, 2).float()
+        return img[:, :3]
+
+    def _texture_net_for_run(self, device, preset, texture_intensity):
+        texture_cfg = self.texture_presets.get(preset, self.texture_presets["Balanced"])
+
+        if not self.texture_pass_enabled:
+            return None
+
+        if not texture_cfg.get("enabled", True):
+            return None
+
+        if texture_intensity <= 1e-5:
+            return None
+
+        return self._texture_net(device)
+
+    def _frame_params(self, frame_cfg, detail_intensity):
+        detail_boost = frame_cfg["detail_boost"]
+        edge_boost = frame_cfg["edge_boost"]
+        temporal_strength = frame_cfg["temporal_strength"]
+        micro_limit = frame_cfg["micro_limit"]
+        luma_boost_mult = frame_cfg["luma_boost_mult"]
+        saturation_boost_mult = frame_cfg["saturation_boost_mult"]
+        motion_threshold = frame_cfg["motion_threshold"]
+        taa_strength = frame_cfg["taa_strength"]
+        dlaa_strength = frame_cfg["dlaa_strength"]
+        tone_strength = frame_cfg["tone_strength"]
+        edge_sharp_strength = frame_cfg["edge_sharp_strength"]
+        motion_sensitivity = frame_cfg["motion_sensitivity"]
+        jitter_scale = frame_cfg["jitter_scale"]
+
+        detail_boost *= detail_intensity
+        edge_boost *= detail_intensity
+        edge_sharp_strength *= detail_intensity
+        micro_limit *= detail_intensity
+
+        return {
+            "detail_boost": detail_boost,
+            "edge_boost": edge_boost,
+            "temporal_strength": temporal_strength,
+            "micro_limit": micro_limit,
+            "luma_boost_mult": luma_boost_mult,
+            "saturation_boost_mult": saturation_boost_mult,
+            "motion_threshold": motion_threshold,
+            "taa_strength": taa_strength,
+            "dlaa_strength": dlaa_strength,
+            "tone_strength": tone_strength,
+            "edge_sharp_strength": edge_sharp_strength,
+            "motion_sensitivity": motion_sensitivity,
+            "jitter_scale": jitter_scale,
+        }
+
+    def _apply_jitter_and_taa(
+        self,
+        rgb,
+        taa,
+        net,
+        motion_sensitivity,
+        preset_jitter_scale,
+        taa_strength,
+        blur_radius,
+    ):
+        motion_gate = 0.0
+        fid = taa.frame_id
+        jitter_count = self._jitter_count(net)
+
+        if jitter_count > 0:
+            taa.frame_id = (fid + 1) % jitter_count
+        else:
+            taa.frame_id = fid + 1
         
+        # Jitter is damped on motion to avoid shimmer.
+        adaptive_jitter_scale = preset_jitter_scale
+
+        if taa.history is not None and taa.history.shape == rgb.shape:
+            motion_estimate = torch.abs(rgb - taa.history).mean()
+            motion_gate = torch.clamp(
+                motion_estimate * self.motion_gate_scale,
+                0.0,
+                1.0,
+            )
+
+            jitter_damping = (
+                1.0 - motion_estimate * self.jitter_motion_damping
+            ).clamp(0.45, 1.0)
+            adaptive_jitter_scale = preset_jitter_scale * jitter_damping
+
+        rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
+        rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
+
+        taa_out = taa.update(rgb, self.taa_alpha, motion_sensitivity)
+        rgb = torch.lerp(rgb, taa_out, taa_strength)
+
+        return rgb, motion_gate
+
+    def _run_dlaa_with_retry(self, net, rgb, tile_size, debug_stats, frame_index):
+        current_tile_size = tile_size
+        min_tile_size = 128
+        dlaa_out = None
+        last_oom_error = None
+
+        while current_tile_size >= min_tile_size:
+            try:
+                dlaa_out = self._tiled_forward(
+                    net,
+                    rgb,
+                    tile_size=current_tile_size,
+                    overlap=32,
+                )
+
+                if debug_stats and frame_index == 0:
+                    raw_model_delta = (dlaa_out - rgb).abs().mean().item()
+                    log.debug(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
+
+                break
+
+            except torch.OutOfMemoryError as e:
+                last_oom_error = e
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                next_tile_size = current_tile_size // 2
+
+                if next_tile_size < min_tile_size:
+                    log.error(
+                        "DLAA tiled inference failed at minimum tile size %d.",
+                        current_tile_size,
+                    )
+                    raise last_oom_error
+
+                log.warning(
+                    "Out of VRAM at tile size %d, retrying with %d.",
+                    current_tile_size,
+                    next_tile_size,
+                )
+
+                current_tile_size = next_tile_size
+
+        if dlaa_out is None:
+            raise RuntimeError("DLAA tiled inference failed.")
+
+        return dlaa_out, current_tile_size
+
+    def _apply_model_residual(
+        self,
+        rgb,
+        dlaa_out,
+        preset,
+        debug_stats,
+        frame_index,
+    ):
+        # Keep the model pass from shifting overall brightness.
+        dlaa_mean = dlaa_out.mean(dim=(1, 2, 3), keepdim=True)
+        rgb_mean = rgb.mean(dim=(1, 2, 3), keepdim=True)
+        dlaa_out = dlaa_out - dlaa_mean + rgb_mean
+
+        preset_model_weight = self.preset_model_weight.get(preset, 1.00)
+        
+        # The network is used as a residual refiner, not a full replacement.
+        model_delta = dlaa_out - rgb
+
+        model_delta_value = None
+        if debug_stats:
+            model_delta_value = model_delta.abs().mean().item()
+
+        dlaa_out = torch.clamp(
+            rgb + model_delta * self.model_weight * preset_model_weight,
+            0.0,
+            1.0,
+        )
+
+        if debug_stats and frame_index == 0:
+            log.debug(f"[DLAA] model_delta_first={model_delta_value:.6f}")
+
+        return dlaa_out, model_delta_value
+
+    def _apply_highlight_preblend(self, dlaa_out, rgb, preset):
+        luma = rgb_luma(dlaa_out)
+        highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
+        
+        # Bright areas are easy to overcook, so pull them back early.
+        highlight_pre_blend = self.highlight_pre_blend * (
+            self.detail_highlight_pre_scale if preset == "Detail" else 1.0
+        )
+        dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
+        dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
+
+        return dlaa_out, highlight_mask
+
+    def _apply_motion_suppression(
+        self,
+        preset,
+        detail_boost,
+        edge_boost,
+        micro_limit,
+        motion_gate,
+        motion_stability,
+    ):
+        motion_cfg = MOTION_SUPPRESSION["Detail"] if preset == "Detail" else MOTION_SUPPRESSION["Default"]
+
+        detail_boost *= (1.0 - motion_gate * motion_cfg["detail"] * motion_stability)
+        edge_boost *= (1.0 - motion_gate * motion_cfg["edge"] * motion_stability)
+        micro_limit *= (1.0 - motion_gate * motion_cfg["micro"] * motion_stability)
+
+        return detail_boost, edge_boost, micro_limit
+
+    def _apply_detail_pass(
+        self,
+        dlaa_out,
+        net,
+        preset,
+        detail_boost,
+        edge_boost,
+        micro_limit,
+        edge_sharp_strength,
+        highlight_mask,
+    ):
+        
+        # Small residual detail pass after the model output.
+        local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
+        fine_detail_rgb = dlaa_out - local_avg_rgb
+
+        luma = rgb_luma(dlaa_out)
+        fine_detail = rgb_luma(fine_detail_rgb)
+
+        texture_dark_mask = torch.clamp(
+            (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
+            0.0,
+            1.0,
+        )
+
+        if preset in ["Detail"]:
+            dark_mask = texture_dark_mask
+            micro_limit = micro_limit * (
+                self.detail_dark_mix_base + self.detail_dark_mix_scale * dark_mask
+            )
+        else:
+            dark_mask = 1.0
+
+        detail_strength = fine_detail.abs().mean(dim=(1, 2, 3), keepdim=True)
+        detail_scale = (
+            self.detail_base_scale + (self.detail_ref_scale / (detail_strength + 1e-6))
+        ).clamp(self.detail_min_scale, self.detail_max_scale)
+
+        fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
+        fine_detail = fine_detail.clamp(-self.fine_detail_limit, self.fine_detail_limit)
+
+        local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
+        global_detail = fine_detail.abs().mean(dim=(1, 2, 3), keepdim=True)
+
+        edge_for_detail = torch.sqrt(
+            F.conv2d(luma, net.sobel_x, padding=1) ** 2 +
+            F.conv2d(luma, net.sobel_y, padding=1) ** 2 +
+            1e-6
+        )
+
+        edge_detail_weight = torch.sigmoid(
+            (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
+        )
+
+        detail_gain = (global_detail / (local_detail + 1e-6)).clamp(
+            self.detail_min_gain,
+            self.detail_max_gain,
+        )
+        detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
+        detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
+        detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
+
+        micro_detail = fine_detail_rgb * detail_gain * detail_boost * dark_mask
+        micro_detail = micro_detail.clamp(-micro_limit, micro_limit)
+        dlaa_out = dlaa_out + micro_detail
+
+        edge_mask = torch.sigmoid(
+            (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
+        )
+        edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
+
+        edge_boosted = edge_detail * edge_sharp_strength * edge_boost * dark_mask
+        edge_boosted = edge_boosted.clamp(
+            -micro_limit * self.edge_detail_limit_scale,
+            micro_limit * self.edge_detail_limit_scale,
+        )
+        dlaa_out = dlaa_out + edge_boosted
+
+        return dlaa_out, texture_dark_mask
+
+    def _apply_tone_and_color_pass(
+        self,
+        dlaa_out,
+        rgb,
+        preset,
+        highlight_mask,
+        tone_strength,
+        luma_boost_mult,
+        saturation_boost_mult,
+    ):
+        tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
+        dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
+
+        luma = rgb_luma(dlaa_out)
+        luma_boost = (
+            self.luma_boost_base *
+            luma_boost_mult *
+            (1.0 - highlight_mask * self.luma_highlight_protect)
+        )
+        dlaa_out = dlaa_out * (1.0 + luma_boost)
+
+        mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
+        saturation_boost = (
+            self.saturation_boost_base *
+            saturation_boost_mult *
+            (1.0 - highlight_mask * self.saturation_highlight_protect)
+        )
+        dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
+
+        highlight_post_blend = self.highlight_post_blend * (
+            self.detail_highlight_post_scale if preset == "Detail" else 1.0
+        )
+        dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
+
+        return torch.clamp(dlaa_out, 0.0, 1.0)
+
+    def _apply_final_temporal_and_blend(
+        self,
+        rgb,
+        dlaa_out,
+        prev_dlaa_output,
+        preset,
+        temporal_strength,
+        motion_threshold,
+        dlaa_strength,
+    ):
+        if prev_dlaa_output is not None:
+            if prev_dlaa_output.shape != dlaa_out.shape:
+                prev_dlaa_output = None
+
+        # Final temporal pass; Detail may keep this disabled.
+        dlaa_out = self._temporal_refine(
+            dlaa_out,
+            prev_dlaa_output,
+            strength=temporal_strength,
+            motion_threshold=motion_threshold,
+        )
+
+        prev_dlaa_output = dlaa_out.detach()
+        dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
+
+        blend_weight = dlaa_strength * self.dlaa_blend_scale
+
+        if preset in ["Detail"]:
+            blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
+
+        rgb = torch.lerp(rgb, dlaa_out, blend_weight)
+
+        return rgb, prev_dlaa_output
+
+    def _apply_dlaa_pipeline(
+        self,
+        rgb,
+        net,
+        texture_net,
+        preset,
+        tile_size,
+        motion_gate,
+        detail_boost,
+        edge_boost,
+        temporal_strength,
+        micro_limit,
+        luma_boost_mult,
+        saturation_boost_mult,
+        motion_threshold,
+        dlaa_strength,
+        tone_strength,
+        edge_sharp_strength,
+        motion_stability,
+        texture_intensity,
+        prev_dlaa_output,
+        debug_stats,
+        frame_index,
+    ):
+        if dlaa_strength <= 0:
+            return rgb, prev_dlaa_output, None
+
+        dlaa_out, current_tile_size = self._run_dlaa_with_retry(
+            net,
+            rgb,
+            tile_size,
+            debug_stats,
+            frame_index,
+        )
+
+        dlaa_out, model_delta_value = self._apply_model_residual(
+            rgb,
+            dlaa_out,
+            preset,
+            debug_stats,
+            frame_index,
+        )
+
+        dlaa_out, highlight_mask = self._apply_highlight_preblend(
+            dlaa_out,
+            rgb,
+            preset,
+        )
+
+        detail_boost, edge_boost, micro_limit = self._apply_motion_suppression(
+            preset,
+            detail_boost,
+            edge_boost,
+            micro_limit,
+            motion_gate,
+            motion_stability,
+        )
+
+        dlaa_out, texture_dark_mask = self._apply_detail_pass(
+            dlaa_out,
+            net,
+            preset,
+            detail_boost,
+            edge_boost,
+            micro_limit,
+            edge_sharp_strength,
+            highlight_mask,
+        )
+
+        dlaa_out = self._apply_texture_pass(
+            texture_net=texture_net,
+            dlaa_out=dlaa_out,
+            tile_size=current_tile_size,
+            motion_gate=motion_gate,
+            dark_mask=texture_dark_mask,
+            highlight_mask=highlight_mask,
+            preset=preset,
+            texture_intensity=texture_intensity,
+            motion_stability=motion_stability,
+            frame_index=frame_index,
+        )
+
+        dlaa_out = self._apply_tone_and_color_pass(
+            dlaa_out,
+            rgb,
+            preset,
+            highlight_mask,
+            tone_strength,
+            luma_boost_mult,
+            saturation_boost_mult,
+        )
+
+        rgb, prev_dlaa_output = self._apply_final_temporal_and_blend(
+            rgb,
+            dlaa_out,
+            prev_dlaa_output,
+            preset,
+            temporal_strength,
+            motion_threshold,
+            dlaa_strength,
+        )
+
+        return rgb, prev_dlaa_output, model_delta_value
+
+    def execute(self, images, preset, detail_intensity=1.00, texture_intensity=1.00, motion_stability=1.00):
+        preset, detail_intensity, texture_intensity, motion_stability = self._normalize_run_inputs(
+            preset,
+            detail_intensity,
+            texture_intensity,
+            motion_stability,
+        )
+
+        device = self._get_device()
+
         B, H, W, C = images.shape
         is_single_image = (B == 1)
-            
-        if is_single_image:
-            blur_radius = 0
-        else:
-            blur_radius = 0 if preset == "Detail" else 1
-        
+        blur_radius = self._frame_blur_radius(preset, is_single_image)
+
         # Temporal state belongs to this execution only.
         taa = TAAState()
         prev_dlaa_output = None
 
         net = self._net(device)
-        texture_cfg = self.texture_presets.get(preset, self.texture_presets["Balanced"])
-        texture_net = (
-            self._texture_net(device)
-            if (
-                self.texture_pass_enabled and
-                texture_cfg.get("enabled", True) and
-                texture_intensity > 1e-5
-            )
-            else None
-        )
-        out_list = []
+        texture_net = self._texture_net_for_run(device, preset, texture_intensity)
 
+        out_list = []
         delta_sum = 0.0
         delta_count = 0
         debug_stats = log.isEnabledFor(logging.DEBUG)
 
-        if mm is not None:
-            try:
-                vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
-            except Exception:
-                vram_mb = 8192
-        else:
-            vram_mb = 8192
+        vram_mb = self._vram_mb(device)
+        tile_size = self._tile_size_for_vram(vram_mb)
+        self._log_tiling(H, W, tile_size)
 
-        if vram_mb <= 8192:
-            tile_size = 512
-        else:
-            tile_size = 1024
-        
-        if H > tile_size or W > tile_size:
-            tile_step = tile_size - 64
-            tile_count = ((H + tile_step - 1) // tile_step) * ((W + tile_step - 1) // tile_step)
-            log.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
-            
         progress = ProgressBar(B) if ProgressBar is not None else None
-        
-        with torch.inference_mode():
-            
-            # TAA needs frame order
-            for i in range(B):
-            
-                img = images[i:i+1].to(device).permute(0, 3, 1, 2).float()
-                rgb = img[:, :3]
 
-                motion_gate = 0.0
-                
-                # Auto is resolved per frame, after history is available.
+        with torch.inference_mode():
+            # TAA needs frame order.
+            for i in range(B):
+                rgb = self._load_frame(images, i, device)
+
                 frame_cfg = self._resolve_frame_config(
                     preset,
                     is_single_image,
                     rgb,
-                    taa
+                    taa,
+                )
+                params = self._frame_params(frame_cfg, detail_intensity)
+
+                rgb, motion_gate = self._apply_jitter_and_taa(
+                    rgb,
+                    taa,
+                    net,
+                    params["motion_sensitivity"],
+                    params["jitter_scale"],
+                    params["taa_strength"],
+                    blur_radius,
                 )
 
-                detail_boost = frame_cfg["detail_boost"]
-                edge_boost = frame_cfg["edge_boost"]
-                temporal_strength = frame_cfg["temporal_strength"]
-                micro_limit = frame_cfg["micro_limit"]
-                luma_boost_mult = frame_cfg["luma_boost_mult"]
-                saturation_boost_mult = frame_cfg["saturation_boost_mult"]
-                motion_threshold = frame_cfg["motion_threshold"]
-                taa_strength = frame_cfg["taa_strength"]
-                dlaa_strength = frame_cfg["dlaa_strength"]
-                tone_strength = frame_cfg["tone_strength"]
-                edge_sharp_strength = frame_cfg["edge_sharp_strength"]
-                motion_sensitivity = frame_cfg["motion_sensitivity"]
-                preset_jitter_scale = frame_cfg["jitter_scale"]
+                rgb, prev_dlaa_output, model_delta_value = self._apply_dlaa_pipeline(
+                    rgb=rgb,
+                    net=net,
+                    texture_net=texture_net,
+                    preset=preset,
+                    tile_size=tile_size,
+                    motion_gate=motion_gate,
+                    detail_boost=params["detail_boost"],
+                    edge_boost=params["edge_boost"],
+                    temporal_strength=params["temporal_strength"],
+                    micro_limit=params["micro_limit"],
+                    luma_boost_mult=params["luma_boost_mult"],
+                    saturation_boost_mult=params["saturation_boost_mult"],
+                    motion_threshold=params["motion_threshold"],
+                    dlaa_strength=params["dlaa_strength"],
+                    tone_strength=params["tone_strength"],
+                    edge_sharp_strength=params["edge_sharp_strength"],
+                    motion_stability=motion_stability,
+                    texture_intensity=texture_intensity,
+                    prev_dlaa_output=prev_dlaa_output,
+                    debug_stats=debug_stats,
+                    frame_index=i,
+                )
 
-                detail_boost *= detail_intensity
-                edge_boost *= detail_intensity
-                edge_sharp_strength *= detail_intensity
-                micro_limit *= detail_intensity
-                
-                fid = taa.frame_id
-                jitter_count = self._jitter_count(net)
+                if debug_stats and model_delta_value is not None:
+                    delta_sum += model_delta_value
+                    delta_count += 1
 
-                if jitter_count > 0:
-                    taa.frame_id = (fid + 1) % jitter_count
-                else:
-                    taa.frame_id = fid + 1
-                
-                # Jitter is damped on motion to avoid shimmer.
-                adaptive_jitter_scale = preset_jitter_scale
-
-                if taa.history is not None and taa.history.shape == rgb.shape:
-                    motion_estimate = torch.abs(rgb - taa.history).mean()
-                    motion_gate = torch.clamp(
-                        motion_estimate * self.motion_gate_scale,
-                        0.0,
-                        1.0
-                    )
-                    
-                    jitter_damping = (
-                        1.0 - motion_estimate * self.jitter_motion_damping
-                    ).clamp(0.45, 1.0)
-                    adaptive_jitter_scale = preset_jitter_scale * jitter_damping
-
-                rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
-                
-                rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
-                
-                taa_out = taa.update(rgb, self.taa_alpha, motion_sensitivity)
-                rgb     = torch.lerp(rgb, taa_out, taa_strength)
-
-                if dlaa_strength > 0:
-
-                    current_tile_size = tile_size
-                    min_tile_size = 128
-                    dlaa_out = None
-                    last_oom_error = None
-
-                    while current_tile_size >= min_tile_size:
-                        try:
-                            dlaa_out = self._tiled_forward(
-                                net,
-                                rgb,
-                                tile_size=current_tile_size,
-                                overlap=32
-                            )
-                            
-                            if debug_stats and i == 0:
-                                raw_model_delta = (dlaa_out - rgb).abs().mean().item()
-                                log.debug(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
-                            
-                            break
-                            
-                        except torch.OutOfMemoryError as e:
-                            last_oom_error = e
-
-                            if torch.cuda.is_available():
-                                torch.cuda.empty_cache()
-
-                            next_tile_size = current_tile_size // 2
-
-                            if next_tile_size < min_tile_size:
-                                log.error(
-                                    "DLAA tiled inference failed at minimum tile size %d.",
-                                    current_tile_size
-                                )
-                                raise last_oom_error
-
-                            log.warning(
-                                "Out of VRAM at tile size %d, retrying with %d.",
-                                current_tile_size,
-                                next_tile_size
-                            )
-
-                            current_tile_size = next_tile_size
-
-                    if dlaa_out is None:
-                        raise RuntimeError("DLAA tiled inference failed.")
-                    
-                    # Keep the model pass from shifting overall brightness.
-                    dlaa_mean = dlaa_out.mean(dim=(1,2,3), keepdim=True)
-                    rgb_mean  = rgb.mean(dim=(1,2,3), keepdim=True)
-                    dlaa_out = dlaa_out - dlaa_mean + rgb_mean
-                    
-
-                    preset_model_weight = self.preset_model_weight.get(preset, 1.00)
-                    
-                    # The network is used as a residual refiner, not a full replacement.
-                    model_delta = dlaa_out - rgb
-
-                    if debug_stats:
-                        model_delta_value = model_delta.abs().mean().item()
-                        delta_sum += model_delta_value
-                        delta_count += 1
-
-                    dlaa_out = torch.clamp(
-                        rgb + model_delta * self.model_weight * preset_model_weight,
-                        0.0,
-                        1.0
-                    )
-
-                    if debug_stats and i == 0:
-                        log.debug(f"[DLAA] model_delta_first={model_delta_value:.6f}")
-                    
-                    luma = rgb_luma(dlaa_out)
-                    highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
-                    
-                    # Bright areas are easy to overcook, so pull them back early.
-                    highlight_pre_blend = self.highlight_pre_blend * (
-                        self.detail_highlight_pre_scale if preset == "Detail" else 1.0
-                    )
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
-                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
-                    
-                    motion_cfg = MOTION_SUPPRESSION["Detail"] if preset == "Detail" else MOTION_SUPPRESSION["Default"]
-
-                    detail_boost *= (1.0 - motion_gate * motion_cfg["detail"] * motion_stability)
-                    edge_boost *= (1.0 - motion_gate * motion_cfg["edge"] * motion_stability)
-                    micro_limit *= (1.0 - motion_gate * motion_cfg["micro"] * motion_stability)
-                    
-                    # Small residual detail pass after the model output.
-                    local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
-                    fine_detail_rgb = dlaa_out - local_avg_rgb
-
-                    luma = rgb_luma(dlaa_out)
-                    fine_detail = rgb_luma(fine_detail_rgb)
-                    
-                    texture_dark_mask = torch.clamp(
-                        (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
-                        0.0,
-                        1.0
-                    )
-
-                    if preset in ["Detail"]:
-                        dark_mask = texture_dark_mask
-                        micro_limit = micro_limit * (
-                            self.detail_dark_mix_base + self.detail_dark_mix_scale * dark_mask
-                        )
-                    else:
-                        dark_mask = 1.0
-
-                    detail_strength = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
-                    detail_scale = (self.detail_base_scale + (self.detail_ref_scale / (detail_strength + 1e-6))).clamp(self.detail_min_scale, self.detail_max_scale)
-
-                    fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
-                    
-
-                    fine_detail = fine_detail.clamp(-self.fine_detail_limit, self.fine_detail_limit)
-
-                    local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
-                    global_detail = fine_detail.abs().mean(dim=(1,2,3), keepdim=True)
-
-                    edge_for_detail = torch.sqrt(
-                        F.conv2d(luma, net.sobel_x, padding=1) ** 2 +
-                        F.conv2d(luma, net.sobel_y, padding=1) ** 2 +
-                        1e-6
-                    )
-
-                    edge_detail_weight = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
-
-                    detail_gain = (global_detail / (local_detail + 1e-6)).clamp(self.detail_min_gain, self.detail_max_gain)
-                    detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
-                    detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
-                    detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
-                    
-                    micro_detail = fine_detail_rgb * detail_gain * detail_boost * dark_mask
-                    micro_detail = micro_detail.clamp(-micro_limit, micro_limit)
-                    dlaa_out = dlaa_out + micro_detail
-                    
-                    edge_mask = torch.sigmoid((edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope)
-                    edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
-
-                    edge_boosted = edge_detail * edge_sharp_strength * edge_boost * dark_mask
-                    edge_boosted = edge_boosted.clamp(
-                        -micro_limit * self.edge_detail_limit_scale,
-                        micro_limit * self.edge_detail_limit_scale
-                    )
-                    dlaa_out = dlaa_out + edge_boosted
-
-                    dlaa_out = self._apply_texture_pass(
-                        texture_net=texture_net,
-                        dlaa_out=dlaa_out,
-                        tile_size=current_tile_size,
-                        motion_gate=motion_gate,
-                        dark_mask=texture_dark_mask,
-                        highlight_mask=highlight_mask,
-                        preset=preset,
-                        texture_intensity=texture_intensity,
-                        motion_stability=motion_stability,
-                        frame_index=i
-                    )
-                    
-                    tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
-                    
-                    dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
-                    
-                    luma = rgb_luma(dlaa_out)
-                    luma_boost = self.luma_boost_base * luma_boost_mult * (1.0 - highlight_mask * self.luma_highlight_protect)
-                    dlaa_out = dlaa_out * (1.0 + luma_boost)
-                    
-                    mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
-                    saturation_boost = (
-                        self.saturation_boost_base *
-                        saturation_boost_mult *
-                        (1.0 - highlight_mask * self.saturation_highlight_protect)
-                    )
-                    dlaa_out = mean_rgb + (dlaa_out - mean_rgb) * (1.0 + saturation_boost)
-                    
-                    highlight_post_blend = self.highlight_post_blend * (
-                        self.detail_highlight_post_scale if preset == "Detail" else 1.0
-                    )
-                    dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
-                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
-
-                    if prev_dlaa_output is not None:
-                        if prev_dlaa_output.shape != dlaa_out.shape:
-                            prev_dlaa_output = None
-                            
-                    # Final temporal pass; Detail may keep this disabled.
-                    dlaa_out = self._temporal_refine(
-                        dlaa_out,
-                        prev_dlaa_output,
-                        strength=temporal_strength,
-                        motion_threshold=motion_threshold
-                    )
-                    
-                    prev_dlaa_output = dlaa_out.detach()
-                    
-                    dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
-                    
-                    blend_weight = dlaa_strength * self.dlaa_blend_scale
-                    
-                    if preset in ["Detail"]:
-                        blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
-                        
-                    rgb = torch.lerp(rgb, dlaa_out, blend_weight)
-                
                 rgb = torch.clamp(rgb, 0.0, 1.0)
-                
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-                
+
                 if progress is not None:
                     progress.update(1)
 
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
-                    
+
         if debug_stats and delta_count > 0:
             log.debug(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
-    
+
         return (torch.cat(out_list, dim=0),)
 
 
