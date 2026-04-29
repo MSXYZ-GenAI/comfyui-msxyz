@@ -86,7 +86,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "preset": (["Auto", "Balanced", "Detail", "Smooth"],),
+                "preset": (["Auto", "Balanced", "Detail", "Smooth", "Photo"],),
             },
             "optional": {
                 "detail_intensity": ("FLOAT", {
@@ -602,10 +602,15 @@ class VideoTAADLAA:
 
     def _frame_edge_aa_strength(self, preset, is_single_image):
         if is_single_image:
+            if preset == "Photo":
+                return self.photo_edge_aa_strength
             return 0.0
 
         if preset == "Detail":
             return self.detail_edge_aa_strength
+
+        if preset == "Photo":
+            return self.photo_edge_aa_strength
 
         return 1.0
         

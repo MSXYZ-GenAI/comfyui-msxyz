@@ -47,6 +47,21 @@ PRESETS = {
         "motion_sensitivity": 0.10,
         "jitter_scale": 0.25,
     },
+    "Photo": {
+        "detail_boost": 0.98,
+        "edge_boost": 0.78,
+        "temporal_strength": 0.12,
+        "micro_limit": 0.024,
+        "luma_boost_mult": 0.94,
+        "saturation_boost_mult": 0.94,
+        "motion_threshold": 0.08,
+        "taa_strength": 0.12,
+        "dlaa_strength": 1.00,
+        "tone_strength": 0.14,
+        "edge_sharp_strength": 0.24,
+        "motion_sensitivity": 0.50,
+        "jitter_scale": 0.0,
+    },
 }
 
 
@@ -119,6 +134,7 @@ PRESET_MODEL_WEIGHT = {
     "Balanced": 1.00,
     "Detail": 1.38,
     "Smooth": 0.90,
+    "Photo": 1.00,
     "Auto": 1.10,
 }
 
@@ -169,6 +185,18 @@ TEXTURE_PRESETS = {
         "motion_suppression": 0.95,
         "highlight_suppression": 0.75,
         "line_suppression": 0.65,
+        "edge_threshold": 0.070,
+        "edge_slope": 18.0,
+    },
+    "Photo": {
+        "enabled": True,
+        "strength": 0.55,
+        "limit": 0.016,
+        "blur_kernel": 5,
+        "dark_base": 0.25,
+        "motion_suppression": 0.95,
+        "highlight_suppression": 0.75,
+        "line_suppression": 0.75,
         "edge_threshold": 0.070,
         "edge_slope": 18.0,
     },
