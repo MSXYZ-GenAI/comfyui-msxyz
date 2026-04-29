@@ -116,9 +116,6 @@ class VideoTAADLAA:
 
     def _net(self, device):
         key = str(device)
-
-        if key in self.net_cache:
-            return self.net_cache[key]
         
         # main model
         with self._net_lock:
@@ -155,7 +152,7 @@ class VideoTAADLAA:
 
             self.net_cache[key] = net
 
-        return self.net_cache[key]
+            return net
         
         
     def _texture_net(self, device):
@@ -164,10 +161,6 @@ class VideoTAADLAA:
 
         key = str(device)
 
-        if key in self.texture_net_cache:
-            return self.texture_net_cache[key]
-            
-        # DLAANet Texture Model Loading
         with self._texture_lock:
             if key in self.texture_net_cache:
                 return self.texture_net_cache[key]
@@ -728,15 +721,18 @@ class VideoTAADLAA:
 
         if taa.history is not None and taa.history.shape == rgb.shape:
             motion_estimate = torch.abs(rgb - taa.history).mean()
-            motion_gate = torch.clamp(
-                motion_estimate * self.motion_gate_scale,
-                0.0,
+            motion_value = float(motion_estimate.item())
+
+            motion_gate = min(
+                max(motion_value * self.motion_gate_scale, 0.0),
                 1.0,
             )
 
-            jitter_damping = (
-                1.0 - motion_estimate * self.jitter_motion_damping
-            ).clamp(0.45, 1.0)
+            jitter_damping = min(
+                max(1.0 - motion_value * self.jitter_motion_damping, 0.45),
+                1.0,
+            )
+
             adaptive_jitter_scale = preset_jitter_scale * jitter_damping
 
         rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
