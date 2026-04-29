@@ -1,7 +1,7 @@
 # Video Adaptive Anti-aliasing
 # v0.1.0
 # MSXYZ
-# Developed with AI-assisted tooling
+# AI-assisted
 
 import torch
 import torch.nn.functional as F
