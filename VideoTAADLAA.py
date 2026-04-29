@@ -272,7 +272,7 @@ class VideoTAADLAA:
             )
 
         out = torch.zeros_like(x)
-        weight = torch.zeros(B, 1, H, W, device=x.device)
+        weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
         
         tile_h = min(tile_size, H)
         tile_w = min(tile_size, W)
@@ -555,14 +555,15 @@ class VideoTAADLAA:
         if mm is not None:
             try:
                 vram_mb = torch.cuda.get_device_properties(device).total_memory // (1024 * 1024)
-            except:
+            except Exception:
                 vram_mb = 8192
         else:
             vram_mb = 8192
 
-        if   vram_mb <= 8192:  tile_size = 512
-        elif vram_mb <= 16384: tile_size = 1024
-        else:                  tile_size = 1024
+        if vram_mb <= 8192:
+            tile_size = 512
+        else:
+            tile_size = 1024
         
         if H > tile_size or W > tile_size:
             tile_step = tile_size - 64
