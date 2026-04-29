@@ -65,4 +65,10 @@ NODE_DEFAULTS = {
     "texture_pass_enabled": True,
     "texture_tile_overlap": 32,
     "texture_log_interval": 30,
+    
+    # Texture shimmer
+    "detail_shimmer_strength": 0.28,
+    "detail_shimmer_threshold": 0.012,
+    "detail_shimmer_slope": 80.0,
+    "detail_shimmer_max_blend": 0.35,
 }
