@@ -466,8 +466,11 @@ class VideoTAADLAA:
         blur_kernel = texture_cfg["blur_kernel"]
         gen_blur = F.avg_pool2d(gen_out, kernel_size=blur_kernel, stride=1, padding=blur_kernel // 2)
         hallucinated_texture = gen_out - gen_blur
-
-        raw_gen_delta = hallucinated_texture.abs().mean().item()
+        
+        debug_stats = log.isEnabledFor(logging.DEBUG)
+        raw_gen_delta = 0.0
+        if debug_stats:
+            raw_gen_delta = hallucinated_texture.abs().mean().item()
 
         dark_base = texture_cfg["dark_base"]
         texture_strength = texture_cfg["strength"] * texture_intensity
@@ -494,14 +497,18 @@ class VideoTAADLAA:
 
         out = dlaa_out + hallucinated_texture * texture_strength
 
-        final_texture_delta = (out - dlaa_out).abs().mean().item()
+        final_texture_delta = 0.0
+
+        if debug_stats:
+            final_texture_delta = (out - dlaa_out).abs().mean().item()
 
         if (
+            debug_stats and
             frame_index is not None and
             self.texture_log_interval > 0 and
             frame_index % self.texture_log_interval == 0
         ):
-            log.info(
+            log.debug(
                 "[DLAA] texture frame=%d raw_delta=%.6f final_delta=%.6f",
                 frame_index,
                 raw_gen_delta,
@@ -551,6 +558,7 @@ class VideoTAADLAA:
 
         delta_sum = 0.0
         delta_count = 0
+        debug_stats = log.isEnabledFor(logging.DEBUG)
 
         if mm is not None:
             try:
@@ -656,9 +664,9 @@ class VideoTAADLAA:
                                 overlap=32
                             )
                             
-                            if i == 0:
+                            if debug_stats and i == 0:
                                 raw_model_delta = (dlaa_out - rgb).abs().mean().item()
-                                log.info(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
+                                log.debug(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
                             
                             break
                             
@@ -698,10 +706,11 @@ class VideoTAADLAA:
                     
                     # The network is used as a residual refiner, not a full replacement.
                     model_delta = dlaa_out - rgb
-                    model_delta_value = model_delta.abs().mean().item()
 
-                    delta_sum += model_delta_value
-                    delta_count += 1
+                    if debug_stats:
+                        model_delta_value = model_delta.abs().mean().item()
+                        delta_sum += model_delta_value
+                        delta_count += 1
 
                     dlaa_out = torch.clamp(
                         rgb + model_delta * self.model_weight * preset_model_weight,
@@ -709,8 +718,8 @@ class VideoTAADLAA:
                         1.0
                     )
 
-                    if i == 0:
-                        log.info(f"[DLAA] model_delta_first={model_delta_value:.6f}")
+                    if debug_stats and i == 0:
+                        log.debug(f"[DLAA] model_delta_first={model_delta_value:.6f}")
                     
                     luma = rgb_luma(dlaa_out)
                     highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
@@ -855,8 +864,8 @@ class VideoTAADLAA:
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
                     
-        if delta_count > 0:
-            log.info(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
+        if debug_stats and delta_count > 0:
+            log.debug(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
     
         return (torch.cat(out_list, dim=0),)
 
