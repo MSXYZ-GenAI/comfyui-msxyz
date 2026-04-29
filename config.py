@@ -73,5 +73,5 @@ NODE_DEFAULTS = {
     "detail_shimmer_slope": 100.0,
     "detail_shimmer_max_blend": 0.35,
     "detail_edge_aa_strength": 0.38,
-    "photo_edge_aa_strength": 0.12,
+    "photo_edge_aa_strength": 0.25,
 }

@@ -554,7 +554,7 @@ class VideoTAADLAA:
 
         if debug_stats:
             final_texture_delta = (out - dlaa_out).abs().mean().item()
-
+            
         if (
             debug_stats and
             frame_index is not None and
@@ -596,6 +596,8 @@ class VideoTAADLAA:
 
     def _frame_blur_radius(self, preset, is_single_image):
         if is_single_image:
+            if preset == "Photo":
+                return 1
             return 0
 
         return 1
@@ -821,7 +823,7 @@ class VideoTAADLAA:
         model_delta_value = None
         if debug_stats:
             model_delta_value = model_delta.abs().mean().item()
-
+            
         dlaa_out = torch.clamp(
             rgb + model_delta * self.model_weight * preset_model_weight,
             0.0,
