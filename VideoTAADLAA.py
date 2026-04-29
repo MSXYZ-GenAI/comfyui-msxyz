@@ -215,10 +215,7 @@ class VideoTAADLAA:
 
                 self.texture_net_cache[key] = net
 
-                log.info(
-                    "[DLAA] Loaded custom texture model: %s",
-                    os.path.basename(model_path)
-                )
+                log.info("[DLAA] Loaded %s", os.path.basename(model_path))
 
             except Exception as e:
                 if not self._texture_missing_warned:
@@ -301,9 +298,6 @@ class VideoTAADLAA:
                 tile         = x[:, :, y0_c:y1, x0_c:x1]
                 dlaa_out_tile = net(tile)
 
-
-                
-
                 out[:, :, y0_c:y1, x0_c:x1]    += dlaa_out_tile * w_map
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
 
@@ -317,16 +311,46 @@ class VideoTAADLAA:
 
         return torch.clamp(out / weight.clamp(min=1e-6), 0.0, 1.0)
 
+    def _jitter_count(self, net):
+        offsets = getattr(net, "jitter_offsets", None)
+
+        if offsets is None or offsets.shape[0] == 0:
+            return 0
+
+        return offsets.shape[0]
+
     def _jitter(self, x, idx, scale, net):
         if scale < 1e-5:
             return x
-        off = net.jitter_offsets[idx % net.jitter_offsets.shape[0]]
+
+        offsets = getattr(net, "jitter_offsets", None)
+
+        if offsets is None or offsets.shape[0] == 0:
+            return x
+
+        off = offsets[idx % offsets.shape[0]].to(device=x.device, dtype=x.dtype)
+
         B, C, H, W = x.shape
-        theta = torch.eye(2, 3, device=x.device).unsqueeze(0).repeat(B, 1, 1)
+
+        theta = torch.eye(
+            2,
+            3,
+            device=x.device,
+            dtype=x.dtype,
+        ).unsqueeze(0).repeat(B, 1, 1)
+
         theta[:, 0, 2] = off[0] * scale / W
         theta[:, 1, 2] = off[1] * scale / H
+
         grid = F.affine_grid(theta, x.shape, align_corners=False)
-        return F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
+
+        return F.grid_sample(
+            x,
+            grid,
+            mode="bilinear",
+            padding_mode="reflection",
+            align_corners=False,
+        )
 
     def _edge_aa(self, x, thr, blur_radius, net):
         if blur_radius <= 0:
@@ -585,7 +609,12 @@ class VideoTAADLAA:
                 micro_limit *= detail_intensity
                 
                 fid = taa.frame_id
-                taa.frame_id = (fid + 1) % net.jitter_offsets.shape[0]
+                jitter_count = self._jitter_count(net)
+
+                if jitter_count > 0:
+                    taa.frame_id = (fid + 1) % jitter_count
+                else:
+                    taa.frame_id = fid + 1
                 
                 # Jitter is damped on motion to avoid shimmer.
                 adaptive_jitter_scale = preset_jitter_scale
@@ -632,8 +661,6 @@ class VideoTAADLAA:
                             
                             break
                             
-                            
-
                         except torch.OutOfMemoryError as e:
                             last_oom_error = e
 
@@ -780,7 +807,6 @@ class VideoTAADLAA:
                     luma_boost = self.luma_boost_base * luma_boost_mult * (1.0 - highlight_mask * self.luma_highlight_protect)
                     dlaa_out = dlaa_out * (1.0 + luma_boost)
                     
-
                     mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
                     saturation_boost = (
                         self.saturation_boost_base *
@@ -806,30 +832,28 @@ class VideoTAADLAA:
                         strength=temporal_strength,
                         motion_threshold=motion_threshold
                     )
-
+                    
                     prev_dlaa_output = dlaa_out.detach()
-
+                    
                     dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
                     
-
-
                     blend_weight = dlaa_strength * self.dlaa_blend_scale
-
+                    
                     if preset in ["Detail"]:
                         blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
                         
                     rgb = torch.lerp(rgb, dlaa_out, blend_weight)
                 
                 rgb = torch.clamp(rgb, 0.0, 1.0)
-
+                
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-
+                
                 if progress is not None:
                     progress.update(1)
 
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
-
+                    
         if delta_count > 0:
             log.info(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
     
