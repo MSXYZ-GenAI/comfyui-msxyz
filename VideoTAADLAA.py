@@ -356,24 +356,25 @@ class VideoTAADLAA:
             align_corners=False,
         )
 
-    def _edge_aa(self, x, thr, blur_radius, net):
-        if blur_radius <= 0:
+    def _edge_aa(self, x, thr, blur_radius, net, strength=1.0):
+        if blur_radius <= 0 or strength <= 1e-5:
             return x
 
         gray = rgb_luma(x)
-        sx   = F.conv2d(gray, net.sobel_x, padding=1)
-        sy   = F.conv2d(gray, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx*sx + sy*sy + 1e-6)
+        sx = F.conv2d(gray, net.sobel_x, padding=1)
+        sy = F.conv2d(gray, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
 
         mask = torch.sigmoid((edge - thr) * self.edge_aa_slope)
+        mask = mask * max(0.0, min(float(strength), 1.0))
 
         blurred = F.avg_pool2d(
-            F.pad(x, [blur_radius]*4, mode="reflect"),
-            blur_radius*2+1,
-            stride=1
+            F.pad(x, [blur_radius] * 4, mode="reflect"),
+            blur_radius * 2 + 1,
+            stride=1,
         )
 
-        return x*(1.0 - mask) + blurred*mask
+        return x * (1.0 - mask) + blurred * mask
         
     def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
         if previous is None:
@@ -415,12 +416,12 @@ class VideoTAADLAA:
         current_detail = current - current_base
         previous_detail = previous - previous_base
 
-        current_luma = rgb_luma(current)
-        previous_luma = rgb_luma(previous)
+        current_base_luma = rgb_luma(current_base)
+        previous_base_luma = rgb_luma(previous_base)
 
-        motion = torch.abs(current_luma - previous_luma)
+        base_motion = torch.abs(current_base_luma - previous_base_luma)
         stable_area = 1.0 - torch.clamp(
-            motion / motion_threshold,
+            base_motion / motion_threshold,
             0.0,
             1.0,
         )
@@ -602,8 +603,17 @@ class VideoTAADLAA:
         if is_single_image:
             return 0
 
-        return 0 if preset == "Detail" else 1
+        return 1
 
+    def _frame_edge_aa_strength(self, preset, is_single_image):
+        if is_single_image:
+            return 0.0
+
+        if preset == "Detail":
+            return self.detail_edge_aa_strength
+
+        return 1.0
+        
     def _vram_mb(self, device):
         try:
             torch_device = torch.device(device)
@@ -700,6 +710,7 @@ class VideoTAADLAA:
         preset_jitter_scale,
         taa_strength,
         blur_radius,
+        edge_aa_strength,
     ):
         motion_gate = 0.0
         fid = taa.frame_id
@@ -727,7 +738,13 @@ class VideoTAADLAA:
             adaptive_jitter_scale = preset_jitter_scale * jitter_damping
 
         rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
-        rgb = self._edge_aa(rgb, self.edge_threshold, blur_radius, net)
+        rgb = self._edge_aa(
+            rgb,
+            self.edge_threshold,
+            blur_radius,
+            net,
+            edge_aa_strength,
+        )
 
         taa_out = taa.update(rgb, self.taa_alpha, motion_sensitivity)
         rgb = torch.lerp(rgb, taa_out, taa_strength)
@@ -1121,6 +1138,10 @@ class VideoTAADLAA:
         B, H, W, C = images.shape
         is_single_image = (B == 1)
         blur_radius = self._frame_blur_radius(preset, is_single_image)
+        edge_aa_strength = self._frame_edge_aa_strength(
+            preset,
+            is_single_image,
+        )
 
         # per-run temporal state
         taa = TAAState()
@@ -1161,6 +1182,7 @@ class VideoTAADLAA:
                     params["jitter_scale"],
                     params["taa_strength"],
                     blur_radius,
+                    edge_aa_strength,
                 )
 
                 rgb, prev_dlaa_output, model_delta_value = self._apply_dlaa_pipeline(
