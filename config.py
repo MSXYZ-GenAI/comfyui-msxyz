@@ -3,8 +3,6 @@
 
 NODE_DEFAULTS = {
     
-    "single_image_detail_texture_intensity": 1.15,
-    
     # Model blend
     "model_weight": 1.00,
     "dlaa_blend_scale": 1.00,

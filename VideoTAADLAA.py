@@ -465,8 +465,8 @@ class VideoTAADLAA:
 
         cfg = frame_cfg.copy()
 
-        if preset == "Detail" and is_single_image:
-            cfg.update(SINGLE_IMAGE_DETAIL)
+        # if preset == "Detail" and is_single_image:
+        #     cfg.update(SINGLE_IMAGE_DETAIL)
 
         return cfg
         
@@ -1122,9 +1122,9 @@ class VideoTAADLAA:
             motion_threshold,
             dlaa_strength,
         )
-
+        
         return rgb, prev_dlaa_output, model_delta_value
-
+        
     def execute(self, images, preset, detail_intensity=1.00, texture_intensity=1.00, motion_stability=1.00):
         preset, detail_intensity, texture_intensity, motion_stability = self._normalize_run_inputs(
             preset,
@@ -1132,48 +1132,41 @@ class VideoTAADLAA:
             texture_intensity,
             motion_stability,
         )
-
+        
         device = self._get_device()
-
+        
         B, H, W, C = images.shape
         is_single_image = (B == 1)
-
-        if (
-            preset == "Detail" and
-            is_single_image and
-            abs(texture_intensity - 1.00) < 1e-6
-        ):
-            texture_intensity = self.single_image_detail_texture_intensity
 
         blur_radius = self._frame_blur_radius(preset, is_single_image)
         edge_aa_strength = self._frame_edge_aa_strength(
             preset,
             is_single_image,
         )
-
+        
         # per-run temporal state
         taa = TAAState()
         prev_dlaa_output = None
-
+        
         net = self._net(device)
         texture_net = self._texture_net_for_run(device, preset, texture_intensity)
-
+        
         out_list = []
         delta_sum = 0.0
         delta_count = 0
         debug_stats = log.isEnabledFor(logging.DEBUG)
-
+        
         vram_mb = self._vram_mb(device)
         tile_size = self._tile_size_for_vram(vram_mb)
         self._log_tiling(H, W, tile_size)
-
+        
         progress = ProgressBar(B) if ProgressBar is not None else None
-
+        
         with torch.inference_mode():
-
+        
             for i in range(B):
                 rgb = self._load_frame(images, i, device)
-
+                
                 frame_cfg = self._resolve_frame_config(
                     preset,
                     is_single_image,
@@ -1181,7 +1174,7 @@ class VideoTAADLAA:
                     taa,
                 )
                 params = self._frame_params(frame_cfg, detail_intensity)
-
+                
                 rgb, motion_gate = self._apply_jitter_and_taa(
                     rgb,
                     taa,
@@ -1192,7 +1185,7 @@ class VideoTAADLAA:
                     blur_radius,
                     edge_aa_strength,
                 )
-
+                
                 rgb, prev_dlaa_output, model_delta_value = self._apply_dlaa_pipeline(
                     rgb=rgb,
                     net=net,
@@ -1216,23 +1209,23 @@ class VideoTAADLAA:
                     debug_stats=debug_stats,
                     frame_index=i,
                 )
-
+                
                 if debug_stats and model_delta_value is not None:
                     delta_sum += model_delta_value
                     delta_count += 1
-
+                    
                 rgb = torch.clamp(rgb, 0.0, 1.0)
                 out_list.append(rgb.permute(0, 2, 3, 1).cpu())
-
+                
                 if progress is not None:
                     progress.update(1)
-
+                    
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
-
+                    
         if debug_stats and delta_count > 0:
             log.debug(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
-
+            
         return (torch.cat(out_list, dim=0),)
 
 
