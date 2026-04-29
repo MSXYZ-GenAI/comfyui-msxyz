@@ -19,7 +19,7 @@ High-quality anti-aliasing nodes for video and image processing in ComfyUI workf
 ## Preview
 | TAA + DLAA Anti-Aliasing | Adaptive Anti-Aliasing |
 | :---: | :---: |
-| <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/video_taadlaa.png" width="100%"> | <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/video_adaptive_aa.png" width="100%"> |
+| <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/assets/video_taadlaa.png" width="100%"> | <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/assets/video_adaptive_aa.png" width="100%"> |
 
 ---
 
@@ -54,8 +54,8 @@ High-quality anti-aliasing nodes for video and image processing in ComfyUI workf
     <td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td width="33%"><img src="compare_1.png" width="100%"></td>
-    <td width="33%"><img src="compare_2.png" width="100%"></td>
+    <td width="33%"><img src="assets/compare_1.png" width="100%"></td>
+    <td width="33%"><img src="assets/compare_2.png" width="100%"></td>
   </tr>
 </table>
 
