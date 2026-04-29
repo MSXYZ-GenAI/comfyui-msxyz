@@ -80,4 +80,30 @@ NODE_DEFAULTS = {
     "detail_fine_line_dark_threshold": 0.34,
     "detail_fine_line_edge_threshold": 0.075,
     "detail_fine_line_blur_strength": 0.50,
+    
+    # Specular detail
+    "detail_specular_strength": 0.12,
+    "detail_specular_threshold": 0.50,
+    "detail_specular_slope": 8.0,
+    "detail_specular_limit": 0.012,
+    "detail_specular_edge_boost": 0.25,
+    
+    # Micro-contrast
+    "detail_micro_contrast_strength": 0.05,
+    "detail_micro_contrast_radius": 5,
+    "detail_micro_contrast_limit": 0.020,
+    "detail_micro_contrast_highlight_protect": 0.65,
+
+    # Edge dehalo
+    "detail_dehalo_strength": 0.12,
+    "detail_dehalo_threshold": 0.10,
+    "detail_dehalo_dark_protect": 0.35,
+    "detail_dehalo_light_protect": 0.55,
+
+    # Fur / hair directional stabilizer
+    "detail_fur_stabilizer_strength": 0.10,
+    "detail_fur_edge_threshold": 0.05,
+    "detail_fur_detail_threshold": 0.012,
+    "detail_fur_blend_limit": 0.25,
+    "detail_fur_motion_protect": 0.85,
 }

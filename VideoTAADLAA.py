@@ -89,7 +89,7 @@ class VideoTAADLAA:
                 "preset": (["Auto", "Balanced", "Detail", "Smooth", "Photo"],),
             },
             "optional": {
-                "detail_intensity": ("FLOAT", {
+                "dlaa_intensity": ("FLOAT", {
                     "default": 1.00,
                     "min": 0.00,
                     "max": 2.00,
@@ -418,6 +418,191 @@ class VideoTAADLAA:
 
         return torch.lerp(x, aa_target, blend).clamp(0.0, 1.0)
     
+    def _specular_detail(self, x, net, highlight_mask, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        luma = rgb_luma(x)
+
+        local_avg = F.avg_pool2d(
+            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        spec_residual = (x - local_avg).clamp(min=0.0)
+        spec_residual = spec_residual.clamp(max=self.detail_specular_limit)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        bright_mask = torch.sigmoid(
+            (luma - self.detail_specular_threshold) *
+            self.detail_specular_slope
+        )
+
+        clip_protect = 1.0 - torch.sigmoid((luma - 0.92) * 20.0)
+
+        edge_mask = torch.sigmoid((edge - 0.04) * 12.0)
+        edge_mix = torch.lerp(
+            torch.ones_like(edge_mask),
+            edge_mask,
+            self.detail_specular_edge_boost,
+        )
+
+        spec_mask = (bright_mask * clip_protect * edge_mix).clamp(0.0, 1.0)
+
+        if highlight_mask is not None:
+            spec_mask = spec_mask * (1.0 - highlight_mask * 0.60)
+
+        return (x + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
+        
+    def _micro_contrast(self, x, highlight_mask, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        radius = int(self.detail_micro_contrast_radius)
+        radius = max(3, radius)
+
+        if radius % 2 == 0:
+            radius += 1
+
+        pad = radius // 2
+
+        local_avg = F.avg_pool2d(
+            F.pad(x, [pad, pad, pad, pad], mode="reflect"),
+            radius,
+            stride=1,
+        )
+
+        residual = x - local_avg
+        residual = residual.clamp(
+            -self.detail_micro_contrast_limit,
+            self.detail_micro_contrast_limit,
+        )
+
+        luma = rgb_luma(x)
+        detail_energy = rgb_luma(residual.abs())
+
+        detail_mask = torch.sigmoid(
+            (detail_energy - 0.006) * 80.0
+        )
+
+        if highlight_mask is not None:
+            protect = 1.0 - highlight_mask * self.detail_micro_contrast_highlight_protect
+        else:
+            protect = 1.0 - torch.sigmoid((luma - 0.85) * 12.0) * self.detail_micro_contrast_highlight_protect
+
+        out = x + residual * detail_mask * protect * strength
+
+        return torch.clamp(out, 0.0, 1.0)
+
+    def _edge_dehalo(self, x, net, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        luma = rgb_luma(x)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        edge_mask = torch.sigmoid(
+            (edge - self.detail_dehalo_threshold) * self.edge_sharp_slope
+        )
+
+        local_avg = F.avg_pool2d(
+            F.pad(x, [2, 2, 2, 2], mode="reflect"),
+            5,
+            stride=1,
+        )
+
+        halo_residual = x - local_avg
+
+        bright_halo = halo_residual.clamp(min=0.0)
+        dark_halo = (-halo_residual).clamp(min=0.0)
+
+        dark_protect = torch.sigmoid((0.22 - luma) * 12.0)
+        light_protect = torch.sigmoid((luma - 0.78) * 12.0)
+
+        bright_reduce = bright_halo * edge_mask * strength * (
+            1.0 - light_protect * self.detail_dehalo_light_protect
+        )
+
+        dark_reduce = dark_halo * edge_mask * strength * (
+            1.0 - dark_protect * self.detail_dehalo_dark_protect
+        )
+
+        out = x - bright_reduce + dark_reduce
+
+        return torch.clamp(out, 0.0, 1.0)
+        
+    def _fur_hair_stabilizer(self, x, previous, net, motion_gate, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        if previous is None or previous.shape != x.shape:
+            return x
+
+        luma = rgb_luma(x)
+        prev_luma = rgb_luma(previous)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        local_avg = F.avg_pool2d(
+            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+        prev_local_avg = F.avg_pool2d(
+            F.pad(previous, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        fine_detail = rgb_luma((x - local_avg).abs())
+        prev_detail = previous - prev_local_avg
+        current_detail = x - local_avg
+
+        edge_mask = torch.sigmoid(
+            (edge - self.detail_fur_edge_threshold) * self.edge_aa_slope
+        )
+
+        detail_mask = torch.sigmoid(
+            (fine_detail - self.detail_fur_detail_threshold) * 80.0
+        )
+
+        stable_motion = 1.0 - min(
+            max(float(motion_gate) * self.detail_fur_motion_protect, 0.0),
+            1.0,
+        )
+
+        fur_mask = (edge_mask * detail_mask * stable_motion).clamp(0.0, 1.0)
+
+        blend = (fur_mask * strength).clamp(0.0, self.detail_fur_blend_limit)
+
+        stabilized_detail = torch.lerp(
+            current_detail,
+            prev_detail,
+            blend,
+        )
+
+        base = local_avg
+        out = base + stabilized_detail
+
+        return torch.clamp(out, 0.0, 1.0)
+        
     def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
         if previous is None:
             return current
@@ -617,7 +802,7 @@ class VideoTAADLAA:
     def _normalize_run_inputs(
         self,
         preset,
-        detail_intensity,
+        dlaa_intensity,
         texture_intensity,
         motion_stability,
     ):
@@ -626,11 +811,11 @@ class VideoTAADLAA:
         elif preset == "Cinematic":
             preset = "Smooth"
 
-        detail_intensity = max(0.0, min(float(detail_intensity), 2.0))
+        dlaa_intensity = max(0.0, min(float(dlaa_intensity), 2.0))
         texture_intensity = max(0.0, min(float(texture_intensity), 2.0))
         motion_stability = max(0.5, min(float(motion_stability), 2.0))
 
-        return preset, detail_intensity, texture_intensity, motion_stability
+        return preset, dlaa_intensity, texture_intensity, motion_stability
 
     def _get_device(self):
         if mm is not None:
@@ -711,7 +896,7 @@ class VideoTAADLAA:
 
         return self._texture_net(device)
 
-    def _frame_params(self, frame_cfg, detail_intensity):
+    def _frame_params(self, frame_cfg, dlaa_intensity):
         detail_boost = frame_cfg["detail_boost"]
         edge_boost = frame_cfg["edge_boost"]
         temporal_strength = frame_cfg["temporal_strength"]
@@ -726,10 +911,10 @@ class VideoTAADLAA:
         motion_sensitivity = frame_cfg["motion_sensitivity"]
         jitter_scale = frame_cfg["jitter_scale"]
 
-        detail_boost *= detail_intensity
-        edge_boost *= detail_intensity
-        edge_sharp_strength *= detail_intensity
-        micro_limit *= detail_intensity
+        detail_boost *= dlaa_intensity
+        edge_boost *= dlaa_intensity
+        edge_sharp_strength *= dlaa_intensity
+        micro_limit *= dlaa_intensity
 
         return {
             "detail_boost": detail_boost,
@@ -1145,7 +1330,7 @@ class VideoTAADLAA:
                 net,
                 self.detail_fine_line_aa_strength,
             )
-
+            
         dlaa_out = self._apply_texture_pass(
             texture_net=texture_net,
             dlaa_out=dlaa_out,
@@ -1158,7 +1343,29 @@ class VideoTAADLAA:
             motion_stability=motion_stability,
             frame_index=frame_index,
         )
-
+        
+        if preset == "Detail":
+            dlaa_out = self._specular_detail(
+                dlaa_out,
+                net,
+                highlight_mask,
+                self.detail_specular_strength,
+            )
+            
+        if preset == "Detail":
+            dlaa_out = self._micro_contrast(
+                dlaa_out,
+                highlight_mask,
+                self.detail_micro_contrast_strength,
+            )
+            
+        if preset == "Detail":
+            dlaa_out = self._edge_dehalo(
+                dlaa_out,
+                net,
+                self.detail_dehalo_strength,
+            )
+            
         dlaa_out = self._apply_tone_and_color_pass(
             dlaa_out,
             rgb,
@@ -1168,6 +1375,15 @@ class VideoTAADLAA:
             luma_boost_mult,
             saturation_boost_mult,
         )
+        
+        if preset == "Detail":
+            dlaa_out = self._fur_hair_stabilizer(
+                dlaa_out,
+                prev_dlaa_output,
+                net,
+                motion_gate,
+                self.detail_fur_stabilizer_strength,
+            )
 
         rgb, prev_dlaa_output = self._apply_final_temporal_and_blend(
             rgb,
@@ -1181,10 +1397,14 @@ class VideoTAADLAA:
         
         return rgb, prev_dlaa_output, model_delta_value
         
-    def execute(self, images, preset, detail_intensity=1.00, texture_intensity=1.00, motion_stability=1.00):
-        preset, detail_intensity, texture_intensity, motion_stability = self._normalize_run_inputs(
+    def execute(self, images, preset, dlaa_intensity=1.00, texture_intensity=1.00, motion_stability=1.00, detail_intensity=None, **kwargs,):
+        
+        # Legacy workflow fallback
+        if detail_intensity is not None:
+            dlaa_intensity = detail_intensity
+        preset, dlaa_intensity, texture_intensity, motion_stability = self._normalize_run_inputs(
             preset,
-            detail_intensity,
+            dlaa_intensity,
             texture_intensity,
             motion_stability,
         )
@@ -1229,7 +1449,7 @@ class VideoTAADLAA:
                     rgb,
                     taa,
                 )
-                params = self._frame_params(frame_cfg, detail_intensity)
+                params = self._frame_params(frame_cfg, dlaa_intensity)
                 
                 rgb, motion_gate = self._apply_jitter_and_taa(
                     rgb,
