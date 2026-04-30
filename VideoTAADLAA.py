@@ -280,7 +280,7 @@ class VideoTAADLAA:
 
             w_x[:ramp] = values
             w_x[-ramp:] = torch.flip(values, dims=[0])
-
+            
         return torch.minimum(
             w_y.view(1, 1, th, 1),
             w_x.view(1, 1, 1, tw)
@@ -302,7 +302,7 @@ class VideoTAADLAA:
             raise ValueError(
                 f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
             )
-
+            
         out = torch.zeros_like(x)
         weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
         weight_cache = {}
