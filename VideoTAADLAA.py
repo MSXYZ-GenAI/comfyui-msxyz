@@ -1610,6 +1610,8 @@ class VideoTAADLAA:
         debug_stats,
         frame_index,
     ):
+        # DLAA inference, detail refinement, texture, tone, and temporal passes.
+        
         if dlaa_strength <= 0:
             return rgb, prev_dlaa_output, None
 
@@ -1760,6 +1762,7 @@ class VideoTAADLAA:
         return rgb, prev_dlaa_output, model_delta_value
         
     def execute(self, images, preset, dlaa_intensity=1.00, texture_intensity=1.00, motion_stability=1.00, detail_intensity=None, **kwargs,):
+        # Main node entry
         
         # Legacy workflow fallback
         if detail_intensity is not None:
