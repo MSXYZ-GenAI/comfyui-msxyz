@@ -9,5 +9,5 @@ dependencies = []
 Repository = "https://github.com/MSXYZ-GenAI/comfyui-msxyz"
 
 [tool.comfy]
-PublisherId = "MSXYZ"
+PublisherId = "msxyz"
 DisplayName = "comfyui-msxyz"
