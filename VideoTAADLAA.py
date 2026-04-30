@@ -141,8 +141,11 @@ class VideoTAADLAA:
                     f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
                 )
                 
-            if "jitter_offsets" in state_dict:
-                del state_dict["jitter_offsets"]
+            state_dict = {
+                key: tensor
+                for key, tensor in state_dict.items()
+                if key != "jitter_offsets"
+            }
                 
             load_result = net.load_state_dict(state_dict, strict=False)
             if load_result.missing_keys:
@@ -204,8 +207,11 @@ class VideoTAADLAA:
                     elif "model" in state_dict:
                         state_dict = state_dict["model"]
                         
-                if "jitter_offsets" in state_dict:
-                    del state_dict["jitter_offsets"]
+                state_dict = {
+                    key: tensor
+                    for key, tensor in state_dict.items()
+                    if key != "jitter_offsets"
+                }
                     
                 load_result = net.load_state_dict(state_dict, strict=False)
                 if load_result.missing_keys:
