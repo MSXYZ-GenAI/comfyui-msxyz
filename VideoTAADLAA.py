@@ -63,6 +63,7 @@ try:
 except ImportError:
     ProgressBar = None
 
+
 log = logging.getLogger("VideoTAADLAA")
 
 
@@ -153,8 +154,7 @@ class VideoTAADLAA:
             self.net_cache[key] = net
 
             return net
-        
-        
+            
     def _texture_net(self, device):
         if not self.texture_pass_enabled:
             return None

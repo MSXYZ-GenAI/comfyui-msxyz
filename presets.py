@@ -77,7 +77,7 @@ AUTO_STATIC = {
     "dlaa_strength": 0.70,
     "tone_strength": 0.10,
     "edge_sharp_strength": 0.18,
-    "motion_sensitivity": 0.07,
+    "motion_sensitivity": 0.08,
     "jitter_scale": 0.15,
 }
 
