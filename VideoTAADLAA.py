@@ -544,6 +544,140 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
+    def _chroma_edge_cleanup(self, x, net, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        luma = rgb_luma(x)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        edge_mask = torch.sigmoid(
+            (edge - self.detail_chroma_edge_threshold) * self.edge_aa_slope
+        )
+
+        chroma = x - luma
+
+        chroma_blur = F.avg_pool2d(
+            F.pad(chroma, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        chroma_delta = chroma_blur - chroma
+        chroma_residual = rgb_luma(chroma_delta.abs())
+        chroma_amount = rgb_luma(chroma.abs())
+
+        chroma_mask = torch.sigmoid(
+            (chroma_amount - self.detail_chroma_saturation_threshold) * 20.0
+        )
+
+        fringe_mask = torch.sigmoid(
+            (chroma_residual - self.detail_chroma_saturation_threshold * 0.25) * 80.0
+        )
+
+        dark_protect = torch.sigmoid(
+            (luma - self.detail_chroma_dark_protect) * 12.0
+        )
+
+        mask = (edge_mask * chroma_mask * fringe_mask * dark_protect).clamp(0.0, 1.0)
+
+        chroma_delta = chroma_delta.clamp(
+            -self.detail_chroma_cleanup_limit,
+            self.detail_chroma_cleanup_limit,
+        )
+
+        clean_chroma = chroma + chroma_delta * mask * strength
+        out = luma + clean_chroma
+
+        # keep luma stable while cleaning chroma
+        luma_error = rgb_luma(out) - luma
+        out = out - luma_error
+
+        return torch.clamp(out, 0.0, 1.0)
+        
+    def _subpixel_edge_reconstruction(self, x, net, motion_gate, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        luma = rgb_luma(x)
+
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        edge_mask = torch.sigmoid(
+            (edge - self.detail_subpixel_edge_threshold) *
+            self.detail_subpixel_edge_slope
+        )
+
+        B, C, H, W = x.shape
+
+        nx = sx / edge.clamp(min=1e-6)
+        ny = sy / edge.clamp(min=1e-6)
+
+        sample_scale = float(self.detail_subpixel_sample_scale)
+
+        offset_x = nx.squeeze(1) * sample_scale * (2.0 / max(W - 1, 1))
+        offset_y = ny.squeeze(1) * sample_scale * (2.0 / max(H - 1, 1))
+
+        yy, xx = torch.meshgrid(
+            torch.linspace(-1.0, 1.0, H, device=x.device, dtype=x.dtype),
+            torch.linspace(-1.0, 1.0, W, device=x.device, dtype=x.dtype),
+            indexing="ij",
+        )
+
+        base_grid = torch.stack((xx, yy), dim=-1).unsqueeze(0).repeat(B, 1, 1, 1)
+
+        offset = torch.stack((offset_x, offset_y), dim=-1)
+
+        grid_pos = base_grid + offset
+        grid_neg = base_grid - offset
+
+        sample_pos = F.grid_sample(
+            x,
+            grid_pos,
+            mode="bilinear",
+            padding_mode="reflection",
+            align_corners=False,
+        )
+
+        sample_neg = F.grid_sample(
+            x,
+            grid_neg,
+            mode="bilinear",
+            padding_mode="reflection",
+            align_corners=False,
+        )
+
+        reconstructed = (sample_pos + sample_neg) * 0.5
+
+        delta = reconstructed - x
+        delta = delta.clamp(
+            -self.detail_subpixel_delta_limit,
+            self.detail_subpixel_delta_limit,
+        )
+
+        stable_motion = 1.0 - min(
+            max(float(motion_gate) * self.detail_subpixel_motion_protect, 0.0),
+            1.0,
+        )
+
+        blend = (edge_mask * strength * stable_motion).clamp(
+            0.0,
+            self.detail_subpixel_blend_limit,
+        )
+
+        out = x + delta * blend
+
+        return torch.clamp(out, 0.0, 1.0)
+        
     def _fur_hair_stabilizer(self, x, previous, net, motion_gate, strength):
         strength = max(0.0, min(float(strength), 1.0))
 
@@ -554,8 +688,6 @@ class VideoTAADLAA:
             return x
 
         luma = rgb_luma(x)
-        prev_luma = rgb_luma(previous)
-
         sx = F.conv2d(luma, net.sobel_x, padding=1)
         sy = F.conv2d(luma, net.sobel_y, padding=1)
         edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
@@ -1364,6 +1496,21 @@ class VideoTAADLAA:
                 dlaa_out,
                 net,
                 self.detail_dehalo_strength,
+            )
+            
+        if preset == "Detail":
+            dlaa_out = self._subpixel_edge_reconstruction(
+                dlaa_out,
+                net,
+                motion_gate,
+                self.detail_subpixel_edge_strength,
+            )
+            
+        if preset == "Detail":
+            dlaa_out = self._chroma_edge_cleanup(
+                dlaa_out,
+                net,
+                self.detail_chroma_cleanup_strength,
             )
             
         dlaa_out = self._apply_tone_and_color_pass(

@@ -93,13 +93,29 @@ NODE_DEFAULTS = {
     "detail_micro_contrast_radius": 5,
     "detail_micro_contrast_limit": 0.016,
     "detail_micro_contrast_highlight_protect": 0.70,
-
+    
     # Edge dehalo
     "detail_dehalo_strength": 0.14,
     "detail_dehalo_threshold": 0.095,
     "detail_dehalo_dark_protect": 0.35,
     "detail_dehalo_light_protect": 0.55,
-
+    
+    # Chroma edge cleanup
+    "detail_chroma_cleanup_strength": 0.18, # best range 0.10 - 0.25
+    "detail_chroma_edge_threshold": 0.055,
+    "detail_chroma_saturation_threshold": 0.070,
+    "detail_chroma_cleanup_limit": 0.014,
+    "detail_chroma_dark_protect": 0.30,
+    
+    # Subpixel edge reconstruction
+    "detail_subpixel_edge_strength": 0.14, # best range 0.10 - 0.20
+    "detail_subpixel_edge_threshold": 0.070,
+    "detail_subpixel_edge_slope": 16.0,
+    "detail_subpixel_sample_scale": 0.35,
+    "detail_subpixel_blend_limit": 0.24,
+    "detail_subpixel_delta_limit": 0.016,
+    "detail_subpixel_motion_protect": 0.75,
+    
     # Fur / hair directional stabilizer
     "detail_fur_stabilizer_strength": 0.08,
     "detail_fur_edge_threshold": 0.05,
