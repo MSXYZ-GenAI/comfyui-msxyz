@@ -129,23 +129,26 @@ class VideoAdaptiveAA:
         frame_count = images.shape[0]
         pbar = ProgressBar(frame_count) if ProgressBar is not None else None
 
-        frames = []
+        out_tensor = torch.empty_like(images)
 
         for i in range(frame_count):
             frame = images[i:i + 1]
-            result = self._apply_aa_frame(
+            frame_out = self._apply_aa_frame(
                 frame,
                 strength,
                 edge_threshold,
                 blur_radius,
             )
 
-            frames.append(result)
+            if frame_out.dtype != out_tensor.dtype or frame_out.device != out_tensor.device:
+                frame_out = frame_out.to(device=out_tensor.device, dtype=out_tensor.dtype)
+
+            out_tensor[i:i + 1].copy_(frame_out)
 
             if pbar is not None:
                 pbar.update(1)
 
-        return (torch.cat(frames, dim=0),)
+        return (out_tensor,)
 
 
 NODE_CLASS_MAPPINGS = {
