@@ -76,34 +76,34 @@ NODE_DEFAULTS = {
     "photo_edge_aa_strength": 0.25,
     
     # Fine-line AA for thin details
-    "detail_fine_line_aa_strength": 0.45,
+    "detail_fine_line_aa_strength": 0.42,
     "detail_fine_line_dark_threshold": 0.34,
     "detail_fine_line_edge_threshold": 0.075,
-    "detail_fine_line_blur_strength": 0.50,
+    "detail_fine_line_blur_strength": 0.44,
     
     # Specular detail
     "detail_specular_strength": 0.12,
-    "detail_specular_threshold": 0.50,
+    "detail_specular_threshold": 0.52,
     "detail_specular_slope": 8.0,
-    "detail_specular_limit": 0.012,
-    "detail_specular_edge_boost": 0.25,
+    "detail_specular_limit": 0.014,
+    "detail_specular_edge_boost": 0.22,
     
     # Micro-contrast
-    "detail_micro_contrast_strength": 0.05,
+    "detail_micro_contrast_strength": 0.045,
     "detail_micro_contrast_radius": 5,
-    "detail_micro_contrast_limit": 0.020,
-    "detail_micro_contrast_highlight_protect": 0.65,
+    "detail_micro_contrast_limit": 0.016,
+    "detail_micro_contrast_highlight_protect": 0.70,
 
     # Edge dehalo
-    "detail_dehalo_strength": 0.12,
-    "detail_dehalo_threshold": 0.10,
+    "detail_dehalo_strength": 0.14,
+    "detail_dehalo_threshold": 0.095,
     "detail_dehalo_dark_protect": 0.35,
     "detail_dehalo_light_protect": 0.55,
 
     # Fur / hair directional stabilizer
-    "detail_fur_stabilizer_strength": 0.10,
+    "detail_fur_stabilizer_strength": 0.08,
     "detail_fur_edge_threshold": 0.05,
     "detail_fur_detail_threshold": 0.012,
-    "detail_fur_blend_limit": 0.25,
+    "detail_fur_blend_limit": 0.20,
     "detail_fur_motion_protect": 0.85,
 }
