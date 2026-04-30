@@ -1427,7 +1427,7 @@ class VideoTAADLAA:
         net = self._net(device)
         texture_net = self._texture_net_for_run(device, preset, texture_intensity)
         
-        out_list = []
+        out_tensor = torch.empty((B, H, W, 3), dtype=images.dtype, device="cpu")
         delta_sum = 0.0
         delta_count = 0
         debug_stats = log.isEnabledFor(logging.DEBUG)
@@ -1491,7 +1491,12 @@ class VideoTAADLAA:
                     delta_count += 1
                     
                 rgb = torch.clamp(rgb, 0.0, 1.0)
-                out_list.append(rgb.permute(0, 2, 3, 1).cpu())
+                frame_out = rgb.permute(0, 2, 3, 1).detach().cpu()
+
+                if frame_out.dtype != out_tensor.dtype:
+                    frame_out = frame_out.to(out_tensor.dtype)
+                
+                out_tensor[i:i + 1].copy_(frame_out)
                 
                 if progress is not None:
                     progress.update(1)
@@ -1502,7 +1507,7 @@ class VideoTAADLAA:
         if debug_stats and delta_count > 0:
             log.debug(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
             
-        return (torch.cat(out_list, dim=0),)
+        return (out_tensor,)
 
 
 NODE_CLASS_MAPPINGS        = {"VideoTAADLAA": VideoTAADLAA}
