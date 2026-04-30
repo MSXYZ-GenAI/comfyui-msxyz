@@ -223,6 +223,8 @@ class VideoTAADLAA:
                 
                 log.info("[DLAA] Loaded %s", os.path.basename(model_path))
                 log.info(f"[DLAA] Texture model parameters: {n_params / 1e6:.2f}M")
+
+                return net
                 
             except Exception as e:
                 if not self._texture_missing_warned:
@@ -234,8 +236,6 @@ class VideoTAADLAA:
                     self._texture_missing_warned = True
                 return None
                 
-        return self.texture_net_cache[key]
-        
     def _tile_weight_map(self, th, tw, overlap, device, dtype):
         w_y = torch.ones(th, device=device, dtype=dtype)
         w_x = torch.ones(tw, device=device, dtype=dtype)
@@ -281,17 +281,6 @@ class VideoTAADLAA:
         out = torch.zeros_like(x)
         weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
         
-        tile_h = min(tile_size, H)
-        tile_w = min(tile_size, W)
-
-        w_map = self._tile_weight_map(
-            tile_h,
-            tile_w,
-            overlap,
-            x.device,
-            x.dtype
-        )
-
         y0 = 0
         while y0 < H:
             y1    = min(y0 + tile_size, H)
@@ -302,8 +291,19 @@ class VideoTAADLAA:
                 x1    = min(x0 + tile_size, W)
                 x0_c  = max(0, x1 - tile_size)
 
-                tile         = x[:, :, y0_c:y1, x0_c:x1]
+                tile = x[:, :, y0_c:y1, x0_c:x1]
                 dlaa_out_tile = net(tile)
+
+                tile_h = tile.shape[2]
+                tile_w = tile.shape[3]
+
+                w_map = self._tile_weight_map(
+                    tile_h,
+                    tile_w,
+                    overlap,
+                    x.device,
+                    x.dtype,
+                )
 
                 out[:, :, y0_c:y1, x0_c:x1]    += dlaa_out_tile * w_map
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
