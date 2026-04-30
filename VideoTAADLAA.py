@@ -122,11 +122,11 @@ class VideoTAADLAA:
         with self._net_lock:
             if key in self.net_cache:
                 return self.net_cache[key]
-
+                
             net = DLAANet().to(device)
-
+            
             base_path = os.path.dirname(os.path.realpath(__file__))
-
+            
             safetensors_path = os.path.join(base_path, "DLAANet.safetensors")
             pth_path = os.path.join(base_path, "DLAANet.pth")
 
@@ -140,36 +140,42 @@ class VideoTAADLAA:
                 raise FileNotFoundError(
                     f"[DLAA] Model not found. Expected: {safetensors_path} or {pth_path}"
                 )
-
+                
             if "jitter_offsets" in state_dict:
                 del state_dict["jitter_offsets"]
-
-            net.load_state_dict(state_dict, strict=False)
+                
+            load_result = net.load_state_dict(state_dict, strict=False)
+            if load_result.missing_keys:
+                log.warning("[DLAA] Main model missing keys: %s", load_result.missing_keys)
+                
+            if load_result.unexpected_keys:
+                log.warning("[DLAA] Main model unexpected keys: %s", load_result.unexpected_keys)
+                
             net = net.float()
             net.eval()
-
+            
             n_params = sum(p.numel() for p in net.parameters())
             log.info(f"[DLAA] Main model parameters: {n_params / 1e6:.2f}M")
-
+            
             self.net_cache[key] = net
-
+            
             return net
             
     def _texture_net(self, device):
         if not self.texture_pass_enabled:
             return None
-
+            
         key = str(device)
-
+        
         with self._texture_lock:
             if key in self.texture_net_cache:
                 return self.texture_net_cache[key]
-
+                
             base_path = os.path.dirname(os.path.realpath(__file__))
-
+            
             safetensors_path = os.path.join(base_path, "DLAATexture.safetensors")
             pth_path = os.path.join(base_path, "DLAATexture.pth")
-
+            
             if os.path.exists(safetensors_path):
                 model_path = safetensors_path
             elif os.path.exists(pth_path):
@@ -179,7 +185,7 @@ class VideoTAADLAA:
                     log.info("[DLAA] Texture model not found, skipping texture pass.")
                     self._texture_missing_warned = True
                 return None
-
+                
             try:
                 net = DLAANet().to(device)
 
@@ -187,7 +193,7 @@ class VideoTAADLAA:
                     state_dict = load_file(model_path, device=str(device))
                 else:
                     state_dict = torch.load(model_path, map_location=device)
-
+                    
                 if isinstance(state_dict, dict):
                     if "state_dict" in state_dict:
                         state_dict = state_dict["state_dict"]
@@ -197,21 +203,27 @@ class VideoTAADLAA:
                         state_dict = state_dict["params"]
                     elif "model" in state_dict:
                         state_dict = state_dict["model"]
-
+                        
                 if "jitter_offsets" in state_dict:
                     del state_dict["jitter_offsets"]
-
-                net.load_state_dict(state_dict, strict=False)
+                    
+                load_result = net.load_state_dict(state_dict, strict=False)
+                if load_result.missing_keys:
+                    log.warning("[DLAA] Texture model missing keys: %s", load_result.missing_keys)
+                    
+                if load_result.unexpected_keys:
+                    log.warning("[DLAA] Texture model unexpected keys: %s", load_result.unexpected_keys)
+                
                 net = net.float()
                 net.eval()
-
+                
                 n_params = sum(p.numel() for p in net.parameters())
-
+                
                 self.texture_net_cache[key] = net
-
+                
                 log.info("[DLAA] Loaded %s", os.path.basename(model_path))
                 log.info(f"[DLAA] Texture model parameters: {n_params / 1e6:.2f}M")
-
+                
             except Exception as e:
                 if not self._texture_missing_warned:
                     import traceback
@@ -221,7 +233,7 @@ class VideoTAADLAA:
                     )
                     self._texture_missing_warned = True
                 return None
-
+                
         return self.texture_net_cache[key]
         
     def _tile_weight_map(self, th, tw, overlap, device, dtype):
@@ -982,51 +994,61 @@ class VideoTAADLAA:
     ):
         if texture_net is None:
             return dlaa_out
-        
+            
         if texture_intensity <= 1e-5:
             return dlaa_out
-        
+            
         texture_cfg = self.texture_presets.get(preset, self.texture_presets["Balanced"])
         if not texture_cfg.get("enabled", True):
             return dlaa_out
-
+            
         gen_out = self._tiled_forward(
             texture_net,
             dlaa_out,
             tile_size=tile_size,
             overlap=self.texture_tile_overlap
         )
-
+        
         if gen_out.shape != dlaa_out.shape:
             log.warning(
                 "[DLAA] Texture model output size does not match input, skipping texture pass."
             )
             return dlaa_out
-
+            
         gray = rgb_luma(dlaa_out)
-
+        
         edge_x = torch.abs(gray[:, :, :, 1:] - gray[:, :, :, :-1])
         edge_y = torch.abs(gray[:, :, 1:, :] - gray[:, :, :-1, :])
-
+        
         edge_x = F.pad(edge_x, (0, 1, 0, 0))
         edge_y = F.pad(edge_y, (0, 0, 0, 1))
-
+        
         thin_edge_mask = (edge_x + edge_y).clamp(0.0, 1.0)
         thin_edge_mask = torch.sigmoid(
             (thin_edge_mask - texture_cfg["edge_threshold"]) * texture_cfg["edge_slope"]
         )
         thin_edge_mask = F.avg_pool2d(thin_edge_mask, kernel_size=3, stride=1, padding=1)
-
+        
         # isolate texture residual
-        blur_kernel = texture_cfg["blur_kernel"]
-        gen_blur = F.avg_pool2d(gen_out, kernel_size=blur_kernel, stride=1, padding=blur_kernel // 2)
+        blur_kernel = int(texture_cfg.get("blur_kernel", 3))
+        blur_kernel = max(3, blur_kernel)
+        
+        if blur_kernel % 2 == 0:
+            blur_kernel += 1
+
+        gen_blur = F.avg_pool2d(
+            gen_out,
+            kernel_size=blur_kernel,
+            stride=1,
+            padding=blur_kernel // 2,
+        )
         hallucinated_texture = gen_out - gen_blur
         
         debug_stats = log.isEnabledFor(logging.DEBUG)
         raw_gen_delta = 0.0
         if debug_stats:
             raw_gen_delta = hallucinated_texture.abs().mean().item()
-
+            
         dark_base = texture_cfg["dark_base"]
         texture_strength = texture_cfg["strength"] * texture_intensity
         texture_limit = texture_cfg["limit"] * texture_intensity
@@ -1043,17 +1065,17 @@ class VideoTAADLAA:
         texture_mask = texture_mask * (
             1.0 - thin_edge_mask * line_suppression
         )
-
+        
         hallucinated_texture = hallucinated_texture * texture_mask
         hallucinated_texture = hallucinated_texture.clamp(
             -texture_limit,
             texture_limit
         )
-
+        
         out = dlaa_out + hallucinated_texture * texture_strength
-
+        
         final_texture_delta = 0.0
-
+        
         if debug_stats:
             final_texture_delta = (out - dlaa_out).abs().mean().item()
             
@@ -1069,7 +1091,7 @@ class VideoTAADLAA:
                 raw_gen_delta,
                 final_texture_delta
             )
-
+            
         return torch.clamp(out, 0.0, 1.0)
         
     def _normalize_run_inputs(
