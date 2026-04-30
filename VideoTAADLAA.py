@@ -142,14 +142,20 @@ class VideoTAADLAA:
                 )
                 
             state_dict = {
-                key: tensor
-                for key, tensor in state_dict.items()
-                if key != "jitter_offsets"
+                param_name: tensor
+                for param_name, tensor in state_dict.items()
+                if param_name != "jitter_offsets"
             }
                 
             load_result = net.load_state_dict(state_dict, strict=False)
-            if load_result.missing_keys:
-                log.warning("[DLAA] Main model missing keys: %s", load_result.missing_keys)
+            
+            missing_keys = [
+                name for name in load_result.missing_keys
+                if name != "jitter_offsets"
+            ]
+
+            if missing_keys:
+                log.warning("[DLAA] Main model missing keys: %s", missing_keys)
                 
             if load_result.unexpected_keys:
                 log.warning("[DLAA] Main model unexpected keys: %s", load_result.unexpected_keys)
@@ -165,7 +171,13 @@ class VideoTAADLAA:
             return net
             
     def _texture_net(self, device):
-        if not self.texture_pass_enabled:
+        texture_enabled = getattr(
+            self,
+            "texture_pass_enabled",
+            NODE_DEFAULTS.get("texture_pass_enabled", True)
+        )
+
+        if not texture_enabled:
             return None
             
         key = str(device)
@@ -208,14 +220,20 @@ class VideoTAADLAA:
                         state_dict = state_dict["model"]
                         
                 state_dict = {
-                    key: tensor
-                    for key, tensor in state_dict.items()
-                    if key != "jitter_offsets"
+                    param_name: tensor
+                    for param_name, tensor in state_dict.items()
+                    if param_name != "jitter_offsets"
                 }
                     
                 load_result = net.load_state_dict(state_dict, strict=False)
-                if load_result.missing_keys:
-                    log.warning("[DLAA] Texture model missing keys: %s", load_result.missing_keys)
+
+                missing_keys = [
+                    name for name in load_result.missing_keys
+                    if name != "jitter_offsets"
+                ]
+
+                if missing_keys:
+                    log.warning("[DLAA] Main model missing keys: %s", missing_keys)
                     
                 if load_result.unexpected_keys:
                     log.warning("[DLAA] Texture model unexpected keys: %s", load_result.unexpected_keys)
@@ -287,6 +305,7 @@ class VideoTAADLAA:
 
         out = torch.zeros_like(x)
         weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
+        weight_cache = {}
         
         y0 = 0
         while y0 < H:
@@ -304,13 +323,18 @@ class VideoTAADLAA:
                 tile_h = tile.shape[2]
                 tile_w = tile.shape[3]
 
-                w_map = self._tile_weight_map(
-                    tile_h,
-                    tile_w,
-                    overlap,
-                    x.device,
-                    x.dtype,
-                )
+                cache_key = (tile_h, tile_w, overlap, x.device, x.dtype)
+
+                if cache_key not in weight_cache:
+                    weight_cache[cache_key] = self._tile_weight_map(
+                        tile_h,
+                        tile_w,
+                        overlap,
+                        x.device,
+                        x.dtype,
+                    )
+
+                w_map = weight_cache[cache_key]
 
                 out[:, :, y0_c:y1, x0_c:x1]    += dlaa_out_tile * w_map
                 weight[:, :, y0_c:y1, x0_c:x1] += w_map
@@ -1143,23 +1167,24 @@ class VideoTAADLAA:
         texture_intensity,
         motion_stability,
     ):
+        # Old preset names from earlier workflows
         if preset == "Sharp":
             preset = "Detail"
         elif preset == "Cinematic":
             preset = "Smooth"
-
+            
         dlaa_intensity = max(0.0, min(float(dlaa_intensity), 2.0))
         texture_intensity = max(0.0, min(float(texture_intensity), 2.0))
         motion_stability = max(0.5, min(float(motion_stability), 2.0))
-
+        
         return preset, dlaa_intensity, texture_intensity, motion_stability
-
+        
     def _get_device(self):
         if mm is not None:
             return mm.get_torch_device()
-
+            
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        
     def _frame_blur_radius(self, preset, is_single_image):
         if is_single_image:
             if preset == "Photo":
@@ -1167,19 +1192,19 @@ class VideoTAADLAA:
             return 0
 
         return 1
-
+        
     def _frame_edge_aa_strength(self, preset, is_single_image):
         if is_single_image:
             if preset == "Photo":
                 return self.photo_edge_aa_strength
             return 0.0
-
+            
         if preset == "Detail":
             return self.detail_edge_aa_strength
-
+            
         if preset == "Photo":
             return self.photo_edge_aa_strength
-
+            
         return 1.0
         
     def _vram_mb(self, device):
@@ -1187,30 +1212,30 @@ class VideoTAADLAA:
             torch_device = torch.device(device)
         except Exception:
             return 0
-
+            
         if torch_device.type != "cuda" or not torch.cuda.is_available():
             return 0
-
+            
         try:
             device_index = torch_device.index
-
+            
             if device_index is None:
                 device_index = torch.cuda.current_device()
-
+                
             return torch.cuda.get_device_properties(device_index).total_memory // (1024 * 1024)
         except Exception:
             return 0
-
+            
     def _tile_size_for_vram(self, vram_mb):
         if vram_mb <= 8192:
             return 512
 
         return 1024
-
+        
     def _log_tiling(self, height, width, tile_size):
         if height <= tile_size and width <= tile_size:
             return
-
+            
         tile_step = tile_size - 64
         tile_count = ((height + tile_step - 1) // tile_step) * ((width + tile_step - 1) // tile_step)
         log.debug(f"[DLAA] Tiled inference: {tile_count} tiles")
@@ -1218,11 +1243,17 @@ class VideoTAADLAA:
     def _load_frame(self, images, frame_index, device):
         img = images[frame_index:frame_index + 1].to(device).permute(0, 3, 1, 2).float()
         return img[:, :3]
-
+        
     def _texture_net_for_run(self, device, preset, texture_intensity):
         texture_cfg = self.texture_presets.get(preset, self.texture_presets["Balanced"])
+        
+        texture_enabled = getattr(
+            self,
+            "texture_pass_enabled",
+            NODE_DEFAULTS.get("texture_pass_enabled", True)
+        )
 
-        if not self.texture_pass_enabled:
+        if not texture_enabled:
             return None
 
         if not texture_cfg.get("enabled", True):
@@ -1232,7 +1263,7 @@ class VideoTAADLAA:
             return None
 
         return self._texture_net(device)
-
+        
     def _frame_params(self, frame_cfg, dlaa_intensity):
         detail_boost = frame_cfg["detail_boost"]
         edge_boost = frame_cfg["edge_boost"]
@@ -1247,12 +1278,12 @@ class VideoTAADLAA:
         edge_sharp_strength = frame_cfg["edge_sharp_strength"]
         motion_sensitivity = frame_cfg["motion_sensitivity"]
         jitter_scale = frame_cfg["jitter_scale"]
-
+        
         detail_boost *= dlaa_intensity
         edge_boost *= dlaa_intensity
         edge_sharp_strength *= dlaa_intensity
         micro_limit *= dlaa_intensity
-
+        
         return {
             "detail_boost": detail_boost,
             "edge_boost": edge_boost,
@@ -1268,7 +1299,7 @@ class VideoTAADLAA:
             "motion_sensitivity": motion_sensitivity,
             "jitter_scale": jitter_scale,
         }
-
+        
     def _apply_jitter_and_taa(
         self,
         rgb,
@@ -1291,23 +1322,23 @@ class VideoTAADLAA:
         
         # damp jitter on motion
         adaptive_jitter_scale = preset_jitter_scale
-
+        
         if taa.history is not None and taa.history.shape == rgb.shape:
             motion_estimate = torch.abs(rgb - taa.history).mean()
             motion_value = float(motion_estimate.item())
-
+            
             motion_gate = min(
                 max(motion_value * self.motion_gate_scale, 0.0),
                 1.0,
             )
-
+            
             jitter_damping = min(
                 max(1.0 - motion_value * self.jitter_motion_damping, 0.45),
                 1.0,
             )
-
+            
             adaptive_jitter_scale = preset_jitter_scale * jitter_damping
-
+            
         rgb = self._jitter(rgb, fid, adaptive_jitter_scale, net)
         rgb = self._edge_aa(
             rgb,
@@ -1316,18 +1347,18 @@ class VideoTAADLAA:
             net,
             edge_aa_strength,
         )
-
+        
         taa_out = taa.update(rgb, self.taa_alpha, motion_sensitivity)
         rgb = torch.lerp(rgb, taa_out, taa_strength)
-
+        
         return rgb, motion_gate
-
+        
     def _run_dlaa_with_retry(self, net, rgb, tile_size, debug_stats, frame_index):
         current_tile_size = tile_size
         min_tile_size = 128
         dlaa_out = None
         last_oom_error = None
-
+        
         while current_tile_size >= min_tile_size:
             try:
                 dlaa_out = self._tiled_forward(
@@ -1336,41 +1367,41 @@ class VideoTAADLAA:
                     tile_size=current_tile_size,
                     overlap=32,
                 )
-
+                
                 if debug_stats and frame_index == 0:
                     raw_model_delta = (dlaa_out - rgb).abs().mean().item()
                     log.debug(f"[DLAA] raw_model_delta={raw_model_delta:.6f}")
-
+                    
                 break
-
+                
             except torch.OutOfMemoryError as e:
                 last_oom_error = e
 
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-
+                    
                 next_tile_size = current_tile_size // 2
-
+                
                 if next_tile_size < min_tile_size:
                     log.error(
                         "DLAA tiled inference failed at minimum tile size %d.",
                         current_tile_size,
                     )
                     raise last_oom_error
-
+                    
                 log.warning(
                     "Out of VRAM at tile size %d, retrying with %d.",
                     current_tile_size,
                     next_tile_size,
                 )
-
+                
                 current_tile_size = next_tile_size
-
+                
         if dlaa_out is None:
             raise RuntimeError("DLAA tiled inference failed.")
-
+            
         return dlaa_out, current_tile_size
-
+        
     def _apply_model_residual(
         self,
         rgb,
@@ -1383,12 +1414,12 @@ class VideoTAADLAA:
         dlaa_mean = dlaa_out.mean(dim=(1, 2, 3), keepdim=True)
         rgb_mean = rgb.mean(dim=(1, 2, 3), keepdim=True)
         dlaa_out = dlaa_out - dlaa_mean + rgb_mean
-
+        
         preset_model_weight = self.preset_model_weight.get(preset, 1.00)
         
         # residual model pass
         model_delta = dlaa_out - rgb
-
+        
         model_delta_value = None
         if debug_stats:
             model_delta_value = model_delta.abs().mean().item()
@@ -1398,12 +1429,12 @@ class VideoTAADLAA:
             0.0,
             1.0,
         )
-
+        
         if debug_stats and frame_index == 0:
             log.debug(f"[DLAA] model_delta_first={model_delta_value:.6f}")
-
+            
         return dlaa_out, model_delta_value
-
+        
     def _apply_highlight_preblend(self, dlaa_out, rgb, preset):
         luma = rgb_luma(dlaa_out)
         highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
@@ -1414,9 +1445,9 @@ class VideoTAADLAA:
         )
         dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_pre_blend)
         dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
-
+        
         return dlaa_out, highlight_mask
-
+        
     def _apply_motion_suppression(
         self,
         preset,
@@ -1427,13 +1458,13 @@ class VideoTAADLAA:
         motion_stability,
     ):
         motion_cfg = MOTION_SUPPRESSION["Detail"] if preset == "Detail" else MOTION_SUPPRESSION["Default"]
-
+        
         detail_boost *= (1.0 - motion_gate * motion_cfg["detail"] * motion_stability)
         edge_boost *= (1.0 - motion_gate * motion_cfg["edge"] * motion_stability)
         micro_limit *= (1.0 - motion_gate * motion_cfg["micro"] * motion_stability)
-
+        
         return detail_boost, edge_boost, micro_limit
-
+        
     def _apply_detail_pass(
         self,
         dlaa_out,
@@ -1449,16 +1480,16 @@ class VideoTAADLAA:
         # local detail pass
         local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
         fine_detail_rgb = dlaa_out - local_avg_rgb
-
+        
         luma = rgb_luma(dlaa_out)
         fine_detail = rgb_luma(fine_detail_rgb)
-
+        
         texture_dark_mask = torch.clamp(
             (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
             0.0,
             1.0,
         )
-
+        
         if preset in ["Detail"]:
             dark_mask = texture_dark_mask
             micro_limit = micro_limit * (
@@ -1466,28 +1497,28 @@ class VideoTAADLAA:
             )
         else:
             dark_mask = 1.0
-
+            
         detail_strength = fine_detail.abs().mean(dim=(1, 2, 3), keepdim=True)
         detail_scale = (
             self.detail_base_scale + (self.detail_ref_scale / (detail_strength + 1e-6))
         ).clamp(self.detail_min_scale, self.detail_max_scale)
-
+        
         fine_detail = fine_detail * torch.sigmoid(fine_detail * detail_scale)
         fine_detail = fine_detail.clamp(-self.fine_detail_limit, self.fine_detail_limit)
-
+        
         local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
         global_detail = fine_detail.abs().mean(dim=(1, 2, 3), keepdim=True)
-
+        
         edge_for_detail = torch.sqrt(
             F.conv2d(luma, net.sobel_x, padding=1) ** 2 +
             F.conv2d(luma, net.sobel_y, padding=1) ** 2 +
             1e-6
         )
-
+        
         edge_detail_weight = torch.sigmoid(
             (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
         )
-
+        
         detail_gain = (global_detail / (local_detail + 1e-6)).clamp(
             self.detail_min_gain,
             self.detail_max_gain,
@@ -1495,25 +1526,25 @@ class VideoTAADLAA:
         detail_gain = detail_gain * (1.0 - local_detail.clamp(0.0, 0.5))
         detail_gain = detail_gain * (1.0 + edge_detail_weight * self.detail_edge_boost)
         detail_gain = detail_gain * (1.0 - highlight_mask * self.detail_highlight_suppression)
-
+        
         micro_detail = fine_detail_rgb * detail_gain * detail_boost * dark_mask
         micro_detail = micro_detail.clamp(-micro_limit, micro_limit)
         dlaa_out = dlaa_out + micro_detail
-
+        
         edge_mask = torch.sigmoid(
             (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
         )
         edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
-
+        
         edge_boosted = edge_detail * edge_sharp_strength * edge_boost * dark_mask
         edge_boosted = edge_boosted.clamp(
             -micro_limit * self.edge_detail_limit_scale,
             micro_limit * self.edge_detail_limit_scale,
         )
         dlaa_out = dlaa_out + edge_boosted
-
+        
         return dlaa_out, texture_dark_mask
-
+        
     def _apply_tone_and_color_pass(
         self,
         dlaa_out,
@@ -1526,7 +1557,7 @@ class VideoTAADLAA:
     ):
         tone_mapped = dlaa_out / (dlaa_out + self.tone_curve_bias)
         dlaa_out = torch.lerp(dlaa_out, tone_mapped, highlight_mask * tone_strength)
-
+        
         luma = rgb_luma(dlaa_out)
         luma_boost = (
             self.luma_boost_base *
@@ -1534,7 +1565,7 @@ class VideoTAADLAA:
             (1.0 - highlight_mask * self.luma_highlight_protect)
         )
         dlaa_out = dlaa_out * (1.0 + luma_boost)
-
+        
         mean_rgb = dlaa_out.mean(dim=1, keepdim=True)
         saturation_boost = (
             self.saturation_boost_base *
@@ -1547,9 +1578,9 @@ class VideoTAADLAA:
             self.detail_highlight_post_scale if preset == "Detail" else 1.0
         )
         dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
-
+        
         return torch.clamp(dlaa_out, 0.0, 1.0)
-
+        
     def _apply_final_temporal_and_blend(
         self,
         rgb,
@@ -1579,19 +1610,19 @@ class VideoTAADLAA:
             strength=temporal_strength,
             motion_threshold=motion_threshold,
         )
-
+        
         prev_dlaa_output = dlaa_out.detach()
         dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
-
+        
         blend_weight = dlaa_strength * self.dlaa_blend_scale
-
+        
         if preset in ["Detail"]:
             blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
-
+            
         rgb = torch.lerp(rgb, dlaa_out, blend_weight)
-
+        
         return rgb, prev_dlaa_output
-
+        
     def _apply_dlaa_pipeline(
         self,
         rgb,
@@ -1628,7 +1659,7 @@ class VideoTAADLAA:
             debug_stats,
             frame_index,
         )
-
+        
         dlaa_out, model_delta_value = self._apply_model_residual(
             rgb,
             dlaa_out,
@@ -1636,13 +1667,13 @@ class VideoTAADLAA:
             debug_stats,
             frame_index,
         )
-
+        
         dlaa_out, highlight_mask = self._apply_highlight_preblend(
             dlaa_out,
             rgb,
             preset,
         )
-
+        
         detail_boost, edge_boost, micro_limit = self._apply_motion_suppression(
             preset,
             detail_boost,
@@ -1651,7 +1682,7 @@ class VideoTAADLAA:
             motion_gate,
             motion_stability,
         )
-
+        
         dlaa_out, texture_dark_mask = self._apply_detail_pass(
             dlaa_out,
             net,
@@ -1691,21 +1722,18 @@ class VideoTAADLAA:
                 self.detail_specular_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._micro_contrast(
                 dlaa_out,
                 highlight_mask,
                 self.detail_micro_contrast_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._edge_dehalo(
                 dlaa_out,
                 net,
                 self.detail_dehalo_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._subpixel_edge_reconstruction(
                 dlaa_out,
                 net,
@@ -1713,14 +1741,12 @@ class VideoTAADLAA:
                 self.detail_subpixel_edge_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._chroma_edge_cleanup(
                 dlaa_out,
                 net,
                 self.detail_chroma_cleanup_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._local_tone_mapping(
                 dlaa_out,
                 highlight_mask,
@@ -1746,7 +1772,6 @@ class VideoTAADLAA:
                 self.detail_specular_temporal_strength,
             )
             
-        if preset == "Detail":
             dlaa_out = self._fur_hair_stabilizer(
                 dlaa_out,
                 prev_dlaa_output,
@@ -1754,7 +1779,7 @@ class VideoTAADLAA:
                 motion_gate,
                 self.detail_fur_stabilizer_strength,
             )
-
+            
         rgb, prev_dlaa_output = self._apply_final_temporal_and_blend(
             rgb,
             dlaa_out,
@@ -1784,7 +1809,7 @@ class VideoTAADLAA:
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
-
+        
         blur_radius = self._frame_blur_radius(preset, is_single_image)
         edge_aa_strength = self._frame_edge_aa_strength(
             preset,
