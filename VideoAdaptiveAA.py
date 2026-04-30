@@ -6,9 +6,14 @@
 import torch
 import torch.nn.functional as F
 
+try:
+    from comfy.utils import ProgressBar
+except Exception:
+    ProgressBar = None
 
 EDGE_EPSILON = 1e-6
 EDGE_FADE_WIDTH = 0.10
+LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
 
 SOBEL_X = (
     (-1.0, 0.0, 1.0),
@@ -53,11 +58,8 @@ class VideoAdaptiveAA:
 
         return self._sobel_cache[cache_key]
 
-    def apply_aa(self, images, strength, edge_threshold, blur_radius):
-        if strength <= 0 or blur_radius <= 0:
-            return (images,)
-
-        img = images.permute(0, 3, 1, 2)
+    def _apply_aa_frame(self, frame, strength, edge_threshold, blur_radius):
+        img = frame.permute(0, 3, 1, 2)
 
         if img.shape[1] not in (3, 4):
             raise ValueError("VideoAdaptiveAA expects RGB or RGBA images.")
@@ -71,9 +73,9 @@ class VideoAdaptiveAA:
             img_rgb = img
 
         img_gray = (
-            0.2126 * img_rgb[:, 0:1, :, :]
-            + 0.7152 * img_rgb[:, 1:2, :, :]
-            + 0.0722 * img_rgb[:, 2:3, :, :]
+            LUMA_WEIGHTS[0] * img_rgb[:, 0:1, :, :]
+            + LUMA_WEIGHTS[1] * img_rgb[:, 1:2, :, :]
+            + LUMA_WEIGHTS[2] * img_rgb[:, 2:3, :, :]
         )
 
         sobel_x, sobel_y = self._get_sobel_kernels(img.dtype, img.device)
@@ -86,15 +88,13 @@ class VideoAdaptiveAA:
         edge_max = edges.amax(dim=(1, 2, 3), keepdim=True).clamp_min(EDGE_EPSILON)
         edges = edges / edge_max
 
-        edge_blend = strength
-
         edge_mask = torch.clamp(
             (edges - edge_threshold) / EDGE_FADE_WIDTH,
             0.0,
             1.0,
         )
 
-        edge_mask = torch.clamp(edge_mask * edge_blend, 0.0, 1.0)
+        edge_mask = torch.clamp(edge_mask * strength, 0.0, 1.0)
 
         kernel_size = blur_radius * 2 + 1
 
@@ -119,9 +119,33 @@ class VideoAdaptiveAA:
         else:
             result = result_rgb
 
-        result = result.permute(0, 2, 3, 1)
+        return result.permute(0, 2, 3, 1).contiguous()
 
-        return (result,)
+    @torch.inference_mode()
+    def apply_aa(self, images, strength, edge_threshold, blur_radius):
+        if strength <= 0 or blur_radius <= 0:
+            return (images,)
+
+        frame_count = images.shape[0]
+        pbar = ProgressBar(frame_count) if ProgressBar is not None else None
+
+        frames = []
+
+        for i in range(frame_count):
+            frame = images[i:i + 1]
+            result = self._apply_aa_frame(
+                frame,
+                strength,
+                edge_threshold,
+                blur_radius,
+            )
+
+            frames.append(result)
+
+            if pbar is not None:
+                pbar.update(1)
+
+        return (torch.cat(frames, dim=0),)
 
 
 NODE_CLASS_MAPPINGS = {
