@@ -678,6 +678,147 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
+    def _temporal_specular_stabilizer(self, x, previous, motion_gate, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        if previous is None or previous.shape != x.shape:
+            return x
+
+        luma = rgb_luma(x)
+        prev_luma = rgb_luma(previous)
+
+        local_avg = F.avg_pool2d(
+            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        prev_local_avg = F.avg_pool2d(
+            F.pad(previous, [1, 1, 1, 1], mode="reflect"),
+            3,
+            stride=1,
+        )
+
+        current_spec = (x - local_avg).clamp(min=0.0)
+        previous_spec = (previous - prev_local_avg).clamp(min=0.0)
+
+        spec_energy = rgb_luma(current_spec)
+
+        bright_mask = torch.sigmoid(
+            (luma - self.detail_specular_temporal_threshold) *
+            self.detail_specular_temporal_slope
+        )
+
+        spec_mask = torch.sigmoid(
+            (spec_energy - self.detail_specular_temporal_detail_threshold) *
+            80.0
+        )
+
+        local_motion = torch.abs(luma - prev_luma)
+        local_stable = 1.0 - torch.clamp(
+            local_motion / 0.08,
+            0.0,
+            1.0,
+        )
+
+        global_stable = 1.0 - min(
+            max(float(motion_gate) * self.detail_specular_temporal_motion_protect, 0.0),
+            1.0,
+        )
+
+        blend = (
+            bright_mask *
+            spec_mask *
+            local_stable *
+            global_stable *
+            strength
+        ).clamp(0.0, self.detail_specular_temporal_blend_limit)
+
+        stabilized_spec = torch.lerp(
+            current_spec,
+            previous_spec,
+            blend,
+        )
+
+        delta = stabilized_spec - current_spec
+        delta = delta.clamp(
+            -self.detail_specular_temporal_delta_limit,
+            self.detail_specular_temporal_delta_limit,
+        )
+
+        out = x + delta
+
+        return torch.clamp(out, 0.0, 1.0)
+        
+    def _local_tone_mapping(self, x, highlight_mask, motion_gate, strength):
+        strength = max(0.0, min(float(strength), 1.0))
+
+        if strength <= 1e-5:
+            return x
+
+        radius = int(self.detail_local_tonemap_radius)
+        radius = max(3, radius)
+
+        if radius % 2 == 0:
+            radius += 1
+
+        pad = radius // 2
+
+        luma = rgb_luma(x)
+
+        local_avg = F.avg_pool2d(
+            F.pad(luma, [pad, pad, pad, pad], mode="reflect"),
+            radius,
+            stride=1,
+        )
+
+        local_contrast = luma - local_avg
+        local_contrast = local_contrast.clamp(
+            -self.detail_local_tonemap_limit,
+            self.detail_local_tonemap_limit,
+        )
+
+        if highlight_mask is not None:
+            highlight_protect = 1.0 - highlight_mask * self.detail_local_tonemap_highlight_protect
+        else:
+            highlight_protect = 1.0 - torch.sigmoid((luma - 0.82) * 12.0) * self.detail_local_tonemap_highlight_protect
+
+        shadow_mask = torch.sigmoid(
+            (self.detail_local_tonemap_shadow_threshold - luma) * 10.0
+        )
+
+        shadow_lift = (
+            shadow_mask *
+            self.detail_local_tonemap_shadow_lift *
+            highlight_protect
+        )
+
+        motion_stable = 1.0 - min(
+            max(float(motion_gate) * self.detail_local_tonemap_motion_protect, 0.0),
+            1.0,
+        )
+
+        luma_delta = (
+            local_contrast * highlight_protect +
+            shadow_lift
+        ) * strength * motion_stable
+
+        luma_delta = luma_delta.clamp(
+            -self.detail_local_tonemap_limit,
+            self.detail_local_tonemap_limit,
+        )
+
+        target_luma = (luma + luma_delta).clamp(0.0, 1.0)
+
+        ratio = target_luma / luma.clamp(min=1e-6)
+        ratio = ratio.clamp(0.90, 1.10)
+        out = x * ratio
+
+        return torch.clamp(out, 0.0, 1.0)
+        
     def _fur_hair_stabilizer(self, x, previous, net, motion_gate, strength):
         strength = max(0.0, min(float(strength), 1.0))
 
@@ -1513,6 +1654,14 @@ class VideoTAADLAA:
                 self.detail_chroma_cleanup_strength,
             )
             
+        if preset == "Detail":
+            dlaa_out = self._local_tone_mapping(
+                dlaa_out,
+                highlight_mask,
+                motion_gate,
+                self.detail_local_tonemap_strength,
+            )
+            
         dlaa_out = self._apply_tone_and_color_pass(
             dlaa_out,
             rgb,
@@ -1523,6 +1672,14 @@ class VideoTAADLAA:
             saturation_boost_mult,
         )
         
+        if preset == "Detail":
+            dlaa_out = self._temporal_specular_stabilizer(
+                dlaa_out,
+                prev_dlaa_output,
+                motion_gate,
+                self.detail_specular_temporal_strength,
+            )
+            
         if preset == "Detail":
             dlaa_out = self._fur_hair_stabilizer(
                 dlaa_out,
