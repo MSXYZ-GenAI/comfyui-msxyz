@@ -264,6 +264,7 @@ class VideoTAADLAA:
         
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
         
+        # Tile-based inference with border blending.
         B, C, H, W = x.shape
 
         if H <= tile_size and W <= tile_size:
