@@ -514,7 +514,12 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
 
-    def _edge_dehalo(self, x, net, strength):
+    def _edge_dehalo(
+        self,
+        x: torch.Tensor,
+        net,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
@@ -556,7 +561,12 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def _chroma_edge_cleanup(self, x, net, strength):
+    def _chroma_edge_cleanup(
+        self,
+        x: torch.Tensor,
+        net,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
@@ -612,7 +622,13 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def _subpixel_edge_reconstruction(self, x, net, motion_gate, strength):
+    def _subpixel_edge_reconstruction(
+        self,
+        x: torch.Tensor,
+        net,
+        motion_gate: float,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
@@ -690,7 +706,13 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def _temporal_specular_stabilizer(self, x, previous, motion_gate, strength):
+    def _temporal_specular_stabilizer(
+        self,
+        x: torch.Tensor,
+        previous: torch.Tensor,
+        motion_gate: float,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
@@ -765,7 +787,13 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def _local_tone_mapping(self, x, highlight_mask, motion_gate, strength):
+    def _local_tone_mapping(
+        self,
+        x: torch.Tensor,
+        highlight_mask: torch.Tensor,
+        motion_gate: float,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
@@ -831,7 +859,14 @@ class VideoTAADLAA:
 
         return torch.clamp(out, 0.0, 1.0)
         
-    def _fur_hair_stabilizer(self, x, previous, net, motion_gate, strength):
+    def _fur_hair_stabilizer(
+        self,
+        x: torch.Tensor,
+        previous: torch.Tensor,
+        net,
+        motion_gate: float,
+        strength: float,
+    ) -> torch.Tensor:
         strength = max(0.0, min(float(strength), 1.0))
 
         if strength <= 1e-5:
