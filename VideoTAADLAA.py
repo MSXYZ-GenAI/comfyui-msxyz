@@ -155,7 +155,7 @@ class VideoTAADLAA:
             ]
 
             if missing_keys:
-                log.warning("[DLAA] Main model missing keys: %s", missing_keys)
+                log.warning("[DLAA] Texture model missing keys: %s", missing_keys)
                 
             if load_result.unexpected_keys:
                 log.warning("[DLAA] Main model unexpected keys: %s", load_result.unexpected_keys)
@@ -1168,15 +1168,17 @@ class VideoTAADLAA:
         motion_stability,
     ):
         # Old preset names from earlier workflows
-        if preset == "Sharp":
-            preset = "Detail"
-        elif preset == "Cinematic":
-            preset = "Smooth"
-            
+        old_presets = {
+            "Sharp": "Detail",
+            "Cinematic": "Smooth",
+        }
+
+        preset = old_presets.get(preset, preset)
+
         dlaa_intensity = max(0.0, min(float(dlaa_intensity), 2.0))
         texture_intensity = max(0.0, min(float(texture_intensity), 2.0))
         motion_stability = max(0.5, min(float(motion_stability), 2.0))
-        
+
         return preset, dlaa_intensity, texture_intensity, motion_stability
         
     def _get_device(self):
@@ -1265,40 +1267,19 @@ class VideoTAADLAA:
         return self._texture_net(device)
         
     def _frame_params(self, frame_cfg, dlaa_intensity):
-        detail_boost = frame_cfg["detail_boost"]
-        edge_boost = frame_cfg["edge_boost"]
-        temporal_strength = frame_cfg["temporal_strength"]
-        micro_limit = frame_cfg["micro_limit"]
-        luma_boost_mult = frame_cfg["luma_boost_mult"]
-        saturation_boost_mult = frame_cfg["saturation_boost_mult"]
-        motion_threshold = frame_cfg["motion_threshold"]
-        taa_strength = frame_cfg["taa_strength"]
-        dlaa_strength = frame_cfg["dlaa_strength"]
-        tone_strength = frame_cfg["tone_strength"]
-        edge_sharp_strength = frame_cfg["edge_sharp_strength"]
-        motion_sensitivity = frame_cfg["motion_sensitivity"]
-        jitter_scale = frame_cfg["jitter_scale"]
-        
-        detail_boost *= dlaa_intensity
-        edge_boost *= dlaa_intensity
-        edge_sharp_strength *= dlaa_intensity
-        micro_limit *= dlaa_intensity
-        
-        return {
-            "detail_boost": detail_boost,
-            "edge_boost": edge_boost,
-            "temporal_strength": temporal_strength,
-            "micro_limit": micro_limit,
-            "luma_boost_mult": luma_boost_mult,
-            "saturation_boost_mult": saturation_boost_mult,
-            "motion_threshold": motion_threshold,
-            "taa_strength": taa_strength,
-            "dlaa_strength": dlaa_strength,
-            "tone_strength": tone_strength,
-            "edge_sharp_strength": edge_sharp_strength,
-            "motion_sensitivity": motion_sensitivity,
-            "jitter_scale": jitter_scale,
-        }
+        params = frame_cfg.copy()
+
+        scaled_params = (
+            "detail_boost",
+            "edge_boost",
+            "edge_sharp_strength",
+            "micro_limit",
+        )
+
+        for name in scaled_params:
+            params[name] *= dlaa_intensity
+
+        return params
         
     def _apply_jitter_and_taa(
         self,
