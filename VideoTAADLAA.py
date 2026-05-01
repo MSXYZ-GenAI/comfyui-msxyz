@@ -85,6 +85,12 @@ class VideoTAADLAA:
     def _load_defaults(self):
         defaults = NODE_DEFAULTS
 
+        self._load_core_defaults(defaults)
+        self._load_detail_defaults(defaults)
+        self._load_runtime_defaults(defaults)
+        self._load_advanced_detail_defaults(defaults)
+
+    def _load_core_defaults(self, defaults):
         # Model blend
         self.model_weight = defaults["model_weight"]
         self.dlaa_blend_scale = defaults["dlaa_blend_scale"]
@@ -101,16 +107,6 @@ class VideoTAADLAA:
         self.highlight_threshold = defaults["highlight_threshold"]
         self.highlight_slope = defaults["highlight_slope"]
 
-        # Detail shaping
-        self.detail_base_scale = defaults["detail_base_scale"]
-        self.detail_ref_scale = defaults["detail_ref_scale"]
-        self.detail_min_scale = defaults["detail_min_scale"]
-        self.detail_max_scale = defaults["detail_max_scale"]
-        self.detail_min_gain = defaults["detail_min_gain"]
-        self.detail_max_gain = defaults["detail_max_gain"]
-        self.detail_edge_boost = defaults["detail_edge_boost"]
-        self.detail_highlight_suppression = defaults["detail_highlight_suppression"]
-
         # Edge detail
         self.edge_sharp_threshold = defaults["edge_sharp_threshold"]
         self.edge_sharp_slope = defaults["edge_sharp_slope"]
@@ -120,6 +116,17 @@ class VideoTAADLAA:
         # Motion handling
         self.motion_gate_scale = defaults["motion_gate_scale"]
         self.jitter_motion_damping = defaults["jitter_motion_damping"]
+
+    def _load_detail_defaults(self, defaults):
+        # Detail shaping
+        self.detail_base_scale = defaults["detail_base_scale"]
+        self.detail_ref_scale = defaults["detail_ref_scale"]
+        self.detail_min_scale = defaults["detail_min_scale"]
+        self.detail_max_scale = defaults["detail_max_scale"]
+        self.detail_min_gain = defaults["detail_min_gain"]
+        self.detail_max_gain = defaults["detail_max_gain"]
+        self.detail_edge_boost = defaults["detail_edge_boost"]
+        self.detail_highlight_suppression = defaults["detail_highlight_suppression"]
 
         # Dark-area detail behavior
         self.detail_dark_luma_start = defaults["detail_dark_luma_start"]
@@ -133,6 +140,17 @@ class VideoTAADLAA:
         self.detail_highlight_post_scale = defaults["detail_highlight_post_scale"]
         self.detail_blend_boost = defaults["detail_blend_boost"]
 
+        # Texture shimmer
+        self.detail_shimmer_strength = defaults["detail_shimmer_strength"]
+        self.detail_shimmer_threshold = defaults["detail_shimmer_threshold"]
+        self.detail_shimmer_slope = defaults["detail_shimmer_slope"]
+        self.detail_shimmer_max_blend = defaults["detail_shimmer_max_blend"]
+
+        # Preset edge AA strength
+        self.detail_edge_aa_strength = defaults["detail_edge_aa_strength"]
+        self.photo_edge_aa_strength = defaults["photo_edge_aa_strength"]
+
+    def _load_runtime_defaults(self, defaults):
         # Auto preset motion thresholds
         self.auto_default_scene_motion = defaults["auto_default_scene_motion"]
         self.auto_static_motion_threshold = defaults["auto_static_motion_threshold"]
@@ -149,15 +167,7 @@ class VideoTAADLAA:
         self.texture_tile_overlap = defaults["texture_tile_overlap"]
         self.texture_log_interval = defaults["texture_log_interval"]
 
-        # Texture shimmer
-        self.detail_shimmer_strength = defaults["detail_shimmer_strength"]
-        self.detail_shimmer_threshold = defaults["detail_shimmer_threshold"]
-        self.detail_shimmer_slope = defaults["detail_shimmer_slope"]
-        self.detail_shimmer_max_blend = defaults["detail_shimmer_max_blend"]
-
-        self.detail_edge_aa_strength = defaults["detail_edge_aa_strength"]
-        self.photo_edge_aa_strength = defaults["photo_edge_aa_strength"]
-
+    def _load_advanced_detail_defaults(self, defaults):
         # Fine-line AA
         self.detail_fine_line_aa_strength = defaults["detail_fine_line_aa_strength"]
         self.detail_fine_line_dark_threshold = defaults["detail_fine_line_dark_threshold"]
@@ -223,7 +233,7 @@ class VideoTAADLAA:
         self.detail_fur_detail_threshold = defaults["detail_fur_detail_threshold"]
         self.detail_fur_blend_limit = defaults["detail_fur_blend_limit"]
         self.detail_fur_motion_protect = defaults["detail_fur_motion_protect"]
-        
+
     def _first_time(self, key):
         if key in self._seen_warnings:
             return False
