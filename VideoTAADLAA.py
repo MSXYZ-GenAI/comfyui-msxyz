@@ -65,7 +65,42 @@ except ImportError:
 
 
 log = logging.getLogger("VideoTAADLAA")
+
 MIN_EFFECT_STRENGTH = 1e-5
+
+# Internal visual tuning constants
+FINE_LINE_DARK_SLOPE = 12.0
+
+SPECULAR_CLIP_LUMA = 0.92
+SPECULAR_CLIP_SLOPE = 20.0
+SPECULAR_EDGE_THRESHOLD = 0.04
+SPECULAR_EDGE_SLOPE = 12.0
+SPECULAR_HIGHLIGHT_SUPPRESSION = 0.60
+
+MICRO_DETAIL_THRESHOLD = 0.006
+MICRO_DETAIL_SLOPE = 80.0
+MICRO_HIGHLIGHT_LUMA = 0.85
+MICRO_HIGHLIGHT_SLOPE = 12.0
+
+DEHALO_DARK_PROTECT_LUMA = 0.22
+DEHALO_LIGHT_PROTECT_LUMA = 0.78
+DEHALO_PROTECT_SLOPE = 12.0
+
+CHROMA_SATURATION_SLOPE = 20.0
+CHROMA_FRINGE_THRESHOLD_SCALE = 0.25
+CHROMA_FRINGE_SLOPE = 80.0
+CHROMA_DARK_PROTECT_SLOPE = 12.0
+
+TEMPORAL_SPEC_DETAIL_SLOPE = 80.0
+TEMPORAL_SPEC_MOTION_SCALE = 0.08
+
+LOCAL_TONEMAP_HIGHLIGHT_LUMA = 0.82
+LOCAL_TONEMAP_HIGHLIGHT_SLOPE = 12.0
+LOCAL_TONEMAP_SHADOW_SLOPE = 10.0
+LOCAL_TONEMAP_RATIO_MIN = 0.90
+LOCAL_TONEMAP_RATIO_MAX = 1.10
+
+FUR_DETAIL_SLOPE = 80.0
 
 
 class VideoTAADLAA:
@@ -583,7 +618,7 @@ class VideoTAADLAA:
         luma, edge = self._luma_edge(x, net)
 
         dark_mask = torch.sigmoid(
-            (self.detail_fine_line_dark_threshold - luma) * 12.0
+            (self.detail_fine_line_dark_threshold - luma) * FINE_LINE_DARK_SLOPE
         )
 
         edge_mask = torch.sigmoid(
@@ -643,9 +678,13 @@ class VideoTAADLAA:
             self.detail_specular_slope
         )
 
-        clip_protect = 1.0 - torch.sigmoid((luma - 0.92) * 20.0)
+        clip_protect = 1.0 - torch.sigmoid(
+            (luma - SPECULAR_CLIP_LUMA) * SPECULAR_CLIP_SLOPE
+        )
 
-        edge_mask = torch.sigmoid((edge - 0.04) * 12.0)
+        edge_mask = torch.sigmoid(
+            (edge - SPECULAR_EDGE_THRESHOLD) * SPECULAR_EDGE_SLOPE
+        )
         edge_mix = torch.lerp(
             torch.ones_like(edge_mask),
             edge_mask,
@@ -655,7 +694,7 @@ class VideoTAADLAA:
         spec_mask = (bright_mask * clip_protect * edge_mix).clamp(0.0, 1.0)
 
         if highlight_mask is not None:
-            spec_mask = spec_mask * (1.0 - highlight_mask * 0.60)
+            spec_mask = spec_mask * (1.0 - highlight_mask * SPECULAR_HIGHLIGHT_SUPPRESSION)
 
         return (x + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
         
@@ -689,13 +728,19 @@ class VideoTAADLAA:
         detail_energy = rgb_luma(residual.abs())
 
         detail_mask = torch.sigmoid(
-            (detail_energy - 0.006) * 80.0
+            (detail_energy - MICRO_DETAIL_THRESHOLD) * MICRO_DETAIL_SLOPE
         )
 
         if highlight_mask is not None:
             protect = 1.0 - highlight_mask * self.detail_micro_contrast_highlight_protect
         else:
-            protect = 1.0 - torch.sigmoid((luma - 0.85) * 12.0) * self.detail_micro_contrast_highlight_protect
+            protect = (
+                1.0 -
+                torch.sigmoid(
+                    (luma - MICRO_HIGHLIGHT_LUMA) * MICRO_HIGHLIGHT_SLOPE
+                ) *
+                self.detail_micro_contrast_highlight_protect
+            )
 
         out = x + residual * detail_mask * protect * strength
 
@@ -729,8 +774,12 @@ class VideoTAADLAA:
         bright_halo = halo_residual.clamp(min=0.0)
         dark_halo = (-halo_residual).clamp(min=0.0)
 
-        dark_protect = torch.sigmoid((0.22 - luma) * 12.0)
-        light_protect = torch.sigmoid((luma - 0.78) * 12.0)
+        dark_protect = torch.sigmoid(
+            (DEHALO_DARK_PROTECT_LUMA - luma) * DEHALO_PROTECT_SLOPE
+        )
+        light_protect = torch.sigmoid(
+            (luma - DEHALO_LIGHT_PROTECT_LUMA) * DEHALO_PROTECT_SLOPE
+        )
 
         bright_reduce = bright_halo * edge_mask * strength * (
             1.0 - light_protect * self.detail_dehalo_light_protect
@@ -774,15 +823,19 @@ class VideoTAADLAA:
         chroma_amount = rgb_luma(chroma.abs())
 
         chroma_mask = torch.sigmoid(
-            (chroma_amount - self.detail_chroma_saturation_threshold) * 20.0
+            (chroma_amount - self.detail_chroma_saturation_threshold) *
+            CHROMA_SATURATION_SLOPE
         )
 
         fringe_mask = torch.sigmoid(
-            (chroma_residual - self.detail_chroma_saturation_threshold * 0.25) * 80.0
+            (
+                chroma_residual -
+                self.detail_chroma_saturation_threshold * CHROMA_FRINGE_THRESHOLD_SCALE
+            ) * CHROMA_FRINGE_SLOPE
         )
 
         dark_protect = torch.sigmoid(
-            (luma - self.detail_chroma_dark_protect) * 12.0
+            (luma - self.detail_chroma_dark_protect) * CHROMA_DARK_PROTECT_SLOPE
         )
 
         mask = (edge_mask * chroma_mask * fringe_mask * dark_protect).clamp(0.0, 1.0)
@@ -927,12 +980,12 @@ class VideoTAADLAA:
 
         spec_mask = torch.sigmoid(
             (spec_energy - self.detail_specular_temporal_detail_threshold) *
-            80.0
+            TEMPORAL_SPEC_DETAIL_SLOPE
         )
 
         local_motion = torch.abs(luma - prev_luma)
         local_stable = 1.0 - torch.clamp(
-            local_motion / 0.08,
+            local_motion / TEMPORAL_SPEC_MOTION_SCALE,
             0.0,
             1.0,
         )
@@ -1003,10 +1056,18 @@ class VideoTAADLAA:
         if highlight_mask is not None:
             highlight_protect = 1.0 - highlight_mask * self.detail_local_tonemap_highlight_protect
         else:
-            highlight_protect = 1.0 - torch.sigmoid((luma - 0.82) * 12.0) * self.detail_local_tonemap_highlight_protect
+            highlight_protect = (
+                1.0 -
+                torch.sigmoid(
+                    (luma - LOCAL_TONEMAP_HIGHLIGHT_LUMA) *
+                    LOCAL_TONEMAP_HIGHLIGHT_SLOPE
+                ) *
+                self.detail_local_tonemap_highlight_protect
+            )
 
         shadow_mask = torch.sigmoid(
-            (self.detail_local_tonemap_shadow_threshold - luma) * 10.0
+            (self.detail_local_tonemap_shadow_threshold - luma) *
+            LOCAL_TONEMAP_SHADOW_SLOPE
         )
 
         shadow_lift = (
@@ -1033,7 +1094,7 @@ class VideoTAADLAA:
         target_luma = (luma + luma_delta).clamp(0.0, 1.0)
 
         ratio = target_luma / luma.clamp(min=1e-6)
-        ratio = ratio.clamp(0.90, 1.10)
+        ratio = ratio.clamp(LOCAL_TONEMAP_RATIO_MIN, LOCAL_TONEMAP_RATIO_MAX)
         out = x * ratio
 
         return torch.clamp(out, 0.0, 1.0)
@@ -1076,7 +1137,7 @@ class VideoTAADLAA:
         )
 
         detail_mask = torch.sigmoid(
-            (fine_detail - self.detail_fur_detail_threshold) * 80.0
+            (fine_detail - self.detail_fur_detail_threshold) * FUR_DETAIL_SLOPE
         )
 
         stable_motion = 1.0 - min(
