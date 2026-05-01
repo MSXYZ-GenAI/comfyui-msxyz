@@ -11,6 +11,8 @@ except ImportError:
 
 
 class TAAState:
+    """Keeps temporal history for the TAA pass."""
+
     def __init__(
         self,
         variance_gamma=1.5,
@@ -31,7 +33,7 @@ class TAAState:
         self.frame_id = 0
 
     @staticmethod
-    def smoothstep(x: torch.Tensor) -> torch.Tensor:
+    def _smoothstep(x: torch.Tensor) -> torch.Tensor:
         return x * x * (3.0 - 2.0 * x)
 
     def update(self, frame, alpha, sensitivity):
@@ -53,7 +55,7 @@ class TAAState:
         raw_diff = torch.abs(frame - self.history).mean(dim=1, keepdim=True)
 
         disocclusion = ((raw_diff - sensitivity * 2.0) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
-        disocclusion = self.smoothstep(disocclusion)
+        disocclusion = self._smoothstep(disocclusion)
 
         gray = rgb_luma(frame)
 
@@ -69,7 +71,7 @@ class TAAState:
         ).clamp(self.edge_guard_min, self.edge_guard_max)
 
         motion_soft = ((diff - sensitivity) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
-        motion_soft = self.smoothstep(motion_soft)
+        motion_soft = self._smoothstep(motion_soft)
 
         dynamic_alpha = alpha * (1.0 - motion_soft) * edge_guard
 
@@ -81,7 +83,7 @@ class TAAState:
 
         reject_strength = ((diff - sensitivity * 1.5) / (sensitivity + 1e-6)).clamp(0.0, 1.0)
         reject_strength = torch.maximum(reject_strength, disocclusion)
-        reject_strength = self.smoothstep(reject_strength)
+        reject_strength = self._smoothstep(reject_strength)
 
         history_clipped = torch.lerp(history_clipped, frame, reject_strength)
 

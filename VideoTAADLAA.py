@@ -74,14 +74,26 @@ class VideoTAADLAA:
 
         self.texture_net_cache = {}
         self._texture_lock = threading.Lock()
-        self._texture_missing_warned = False
+        self._seen_warnings = set()
 
-        for name, value in NODE_DEFAULTS.items():
-            setattr(self, name, value)
+        self._load_defaults()
 
         self.preset_model_weight = PRESET_MODEL_WEIGHT
         self.texture_presets = TEXTURE_PRESETS
 
+    def _load_defaults(self):
+        self.defaults = NODE_DEFAULTS.copy()
+
+        for name, value in self.defaults.items():
+            setattr(self, name, value)
+
+    def _first_time(self, key):
+        if key in self._seen_warnings:
+            return False
+
+        self._seen_warnings.add(key)
+        return True
+    
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -196,9 +208,8 @@ class VideoTAADLAA:
             elif os.path.exists(pth_path):
                 model_path = pth_path
             else:
-                if not self._texture_missing_warned:
+                if self._first_time("texture_missing"):
                     log.info("[DLAA] Texture model not found, skipping texture pass.")
-                    self._texture_missing_warned = True
                 return None
                 
             try:
@@ -251,13 +262,12 @@ class VideoTAADLAA:
                 return net
                 
             except Exception as e:
-                if not self._texture_missing_warned:
+                if self._first_time("texture_load_error"):
                     import traceback
                     log.error(f"[DLAA] Texture model exception:\n{traceback.format_exc()}")
                     log.warning(
                         f"[DLAA] Texture model could not be loaded, skipping texture pass: {type(e).__name__}: {e!r}"
                     )
-                    self._texture_missing_warned = True
                 return None
                 
     def _tile_weight_map(self, th, tw, overlap, device, dtype):

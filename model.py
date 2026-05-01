@@ -6,7 +6,7 @@ import torch.nn as nn
 
 
 class DLAANet(nn.Module):
-    """DLAA residual refinement network."""
+    """Small residual refinement model for the DLAA pass."""
     
     def __init__(self):
         super().__init__()
