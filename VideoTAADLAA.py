@@ -1229,12 +1229,34 @@ class VideoTAADLAA:
         if not texture_cfg.get("enabled", True):
             return dlaa_out
             
-        gen_out = self._tiled_forward(
-            texture_net,
-            dlaa_out,
-            tile_size=tile_size,
-            overlap=self.texture_tile_overlap
-        )
+        try:
+            gen_out = self._tiled_forward(
+                texture_net,
+                dlaa_out,
+                tile_size=tile_size,
+                overlap=self.texture_tile_overlap,
+            )
+
+        except torch.OutOfMemoryError:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            if self._first_time("texture_oom"):
+                log.warning("[DLAA] Texture pass ran out of VRAM, skipping texture pass.")
+
+            return dlaa_out
+
+        except RuntimeError as e:
+            if "out of memory" not in str(e).lower():
+                raise
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            if self._first_time("texture_oom"):
+                log.warning("[DLAA] Texture pass ran out of VRAM, skipping texture pass.")
+
+            return dlaa_out
         
         if gen_out.shape != dlaa_out.shape:
             log.warning(
