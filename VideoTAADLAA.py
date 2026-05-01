@@ -547,16 +547,21 @@ class VideoTAADLAA:
             align_corners=False,
         )
 
+    def _luma_edge(self, x, net):
+        luma = rgb_luma(x)
+        sx = F.conv2d(luma, net.sobel_x, padding=1)
+        sy = F.conv2d(luma, net.sobel_y, padding=1)
+        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+
+        return luma, edge
+
     def _edge_aa(self, x, thr, blur_radius, net, strength=1.0):
         strength = clamp01(strength)
 
         if blur_radius <= 0 or strength <= MIN_EFFECT_STRENGTH:
             return x
 
-        gray = rgb_luma(x)
-        sx = F.conv2d(gray, net.sobel_x, padding=1)
-        sy = F.conv2d(gray, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+        _, edge = self._luma_edge(x, net)
 
         mask = torch.sigmoid((edge - thr) * self.edge_aa_slope)
         mask = mask * strength
@@ -575,11 +580,7 @@ class VideoTAADLAA:
         if strength <= MIN_EFFECT_STRENGTH:
             return x
 
-        luma = rgb_luma(x)
-
-        sx = F.conv2d(luma, net.sobel_x, padding=1)
-        sy = F.conv2d(luma, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+        luma, edge = self._luma_edge(x, net)
 
         dark_mask = torch.sigmoid(
             (self.detail_fine_line_dark_threshold - luma) * 12.0
@@ -626,7 +627,7 @@ class VideoTAADLAA:
         if strength <= MIN_EFFECT_STRENGTH:
             return x
 
-        luma = rgb_luma(x)
+        luma, edge = self._luma_edge(x, net)
 
         local_avg = F.avg_pool2d(
             F.pad(x, [1, 1, 1, 1], mode="reflect"),
@@ -636,10 +637,6 @@ class VideoTAADLAA:
 
         spec_residual = (x - local_avg).clamp(min=0.0)
         spec_residual = spec_residual.clamp(max=self.detail_specular_limit)
-
-        sx = F.conv2d(luma, net.sobel_x, padding=1)
-        sy = F.conv2d(luma, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
 
         bright_mask = torch.sigmoid(
             (luma - self.detail_specular_threshold) *
@@ -715,11 +712,7 @@ class VideoTAADLAA:
         if strength <= MIN_EFFECT_STRENGTH:
             return x
 
-        luma = rgb_luma(x)
-
-        sx = F.conv2d(luma, net.sobel_x, padding=1)
-        sy = F.conv2d(luma, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+        luma, edge = self._luma_edge(x, net)
 
         edge_mask = torch.sigmoid(
             (edge - self.detail_dehalo_threshold) * self.edge_sharp_slope
@@ -762,11 +755,7 @@ class VideoTAADLAA:
         if strength <= MIN_EFFECT_STRENGTH:
             return x
 
-        luma = rgb_luma(x)
-
-        sx = F.conv2d(luma, net.sobel_x, padding=1)
-        sy = F.conv2d(luma, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+        luma, edge = self._luma_edge(x, net)
 
         edge_mask = torch.sigmoid(
             (edge - self.detail_chroma_edge_threshold) * self.edge_aa_slope
@@ -1065,10 +1054,7 @@ class VideoTAADLAA:
         if previous is None or previous.shape != x.shape:
             return x
 
-        luma = rgb_luma(x)
-        sx = F.conv2d(luma, net.sobel_x, padding=1)
-        sy = F.conv2d(luma, net.sobel_y, padding=1)
-        edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
+        _, edge = self._luma_edge(x, net)
 
         local_avg = F.avg_pool2d(
             F.pad(x, [1, 1, 1, 1], mode="reflect"),
