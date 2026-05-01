@@ -1,9 +1,32 @@
 __version__ = "0.2.0"
 
-from .VideoAdaptiveAA import NODE_CLASS_MAPPINGS as AA_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as AA_NAMES
-from .VideoTAADLAA import NODE_CLASS_MAPPINGS as TAA_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as TAA_NAMES
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
 
-NODE_CLASS_MAPPINGS = {**AA_MAPPINGS, **TAA_MAPPINGS}
-NODE_DISPLAY_NAME_MAPPINGS = {**AA_NAMES, **TAA_NAMES}
+try:
+    from .VideoAdaptiveAA import (
+        NODE_CLASS_MAPPINGS as AA_MAPPINGS,
+        NODE_DISPLAY_NAME_MAPPINGS as AA_NAMES,
+    )
 
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+    NODE_CLASS_MAPPINGS.update(AA_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(AA_NAMES)
+
+except Exception as e:
+    print(f"[MSXYZ] VideoAdaptiveAA failed to load, skipped: {type(e).__name__}: {e}")
+
+
+try:
+    from .VideoTAADLAA import (
+        NODE_CLASS_MAPPINGS as TAA_MAPPINGS,
+        NODE_DISPLAY_NAME_MAPPINGS as TAA_NAMES,
+    )
+
+    NODE_CLASS_MAPPINGS.update(TAA_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(TAA_NAMES)
+
+except Exception as e:
+    print(f"[MSXYZ] VideoTAADLAA failed to load: {type(e).__name__}: {e}")
+
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
