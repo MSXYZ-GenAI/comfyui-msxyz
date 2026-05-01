@@ -240,7 +240,7 @@ class VideoTAADLAA:
 
         self._seen_warnings.add(key)
         return True
-    
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
