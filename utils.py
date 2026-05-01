@@ -12,5 +12,5 @@ def rgb_luma(x: torch.Tensor) -> torch.Tensor:
     return r * x[:, 0:1] + g * x[:, 1:2] + b * x[:, 2:3]
 
 
-def clamp01(value):
+def clamp01(value) -> float:
     return max(0.0, min(float(value), 1.0))
