@@ -2,6 +2,8 @@
 # MSXYZ
 
 
+# Internal tuning values for the AA pipeline.
+# Only a small set of controls is exposed in ComfyUI.
 NODE_DEFAULTS = {
     # Model blend
     "model_weight": 1.00,
@@ -72,7 +74,7 @@ NODE_DEFAULTS = {
     "detail_shimmer_threshold": 0.008,
     "detail_shimmer_slope": 100.0,
     "detail_shimmer_max_blend": 0.35,
-    
+
     # Preset edge AA strength
     "detail_edge_aa_strength": 0.38,
     "photo_edge_aa_strength": 0.25,
