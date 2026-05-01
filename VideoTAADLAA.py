@@ -18,9 +18,9 @@ except ImportError:
     from model import DLAANet
 
 try:
-    from .utils import rgb_luma
+    from .utils import rgb_luma, clamp01
 except ImportError:
-    from utils import rgb_luma
+    from utils import rgb_luma, clamp01
 
 try:
     from .taa import TAAState
@@ -65,6 +65,7 @@ except ImportError:
 
 
 log = logging.getLogger("VideoTAADLAA")
+MIN_EFFECT_STRENGTH = 1e-5
 
 
 class VideoTAADLAA:
@@ -537,7 +538,9 @@ class VideoTAADLAA:
         )
 
     def _edge_aa(self, x, thr, blur_radius, net, strength=1.0):
-        if blur_radius <= 0 or strength <= 1e-5:
+        strength = clamp01(strength)
+
+        if blur_radius <= 0 or strength <= MIN_EFFECT_STRENGTH:
             return x
 
         gray = rgb_luma(x)
@@ -546,7 +549,7 @@ class VideoTAADLAA:
         edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
 
         mask = torch.sigmoid((edge - thr) * self.edge_aa_slope)
-        mask = mask * max(0.0, min(float(strength), 1.0))
+        mask = mask * strength
 
         blurred = F.avg_pool2d(
             F.pad(x, [blur_radius] * 4, mode="reflect"),
@@ -557,9 +560,9 @@ class VideoTAADLAA:
         return x * (1.0 - mask) + blurred * mask
         
     def _fine_line_aa(self, x, net, strength):
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         luma = rgb_luma(x)
@@ -608,9 +611,9 @@ class VideoTAADLAA:
         return torch.lerp(x, aa_target, blend).clamp(0.0, 1.0)
     
     def _specular_detail(self, x, net, highlight_mask, strength):
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         luma = rgb_luma(x)
@@ -650,9 +653,9 @@ class VideoTAADLAA:
         return (x + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
         
     def _micro_contrast(self, x, highlight_mask, strength):
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         radius = int(self.detail_micro_contrast_radius)
@@ -697,9 +700,9 @@ class VideoTAADLAA:
         net,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         luma = rgb_luma(x)
@@ -744,9 +747,9 @@ class VideoTAADLAA:
         net,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         luma = rgb_luma(x)
@@ -806,11 +809,11 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
-
+            
         luma = rgb_luma(x)
 
         sx = F.conv2d(luma, net.sobel_x, padding=1)
@@ -890,9 +893,9 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         if previous is None or previous.shape != x.shape:
@@ -971,9 +974,9 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         radius = int(self.detail_local_tonemap_radius)
@@ -1044,9 +1047,9 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
-        strength = max(0.0, min(float(strength), 1.0))
+        strength = clamp01(strength)
 
-        if strength <= 1e-5:
+        if strength <= MIN_EFFECT_STRENGTH:
             return x
 
         if previous is None or previous.shape != x.shape:
@@ -1131,7 +1134,9 @@ class VideoTAADLAA:
         if previous.shape != current.shape:
             return current
 
-        if strength <= 1e-5:
+        strength = clamp01(strength)
+
+        if strength <= MIN_EFFECT_STRENGTH:
             return current
 
         current_base = F.avg_pool2d(current, 3, stride=1, padding=1)
