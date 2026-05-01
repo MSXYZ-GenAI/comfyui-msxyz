@@ -83,7 +83,9 @@ class VideoTAADLAA:
 
     def _load_defaults(self):
         self.defaults = NODE_DEFAULTS.copy()
-
+        
+        # ComfyUI does not pass __init__ params to nodes.
+        # Keep NODE_DEFAULTS as instance attributes for internal use.
         for name, value in self.defaults.items():
             setattr(self, name, value)
 
