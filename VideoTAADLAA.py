@@ -155,7 +155,7 @@ class VideoTAADLAA:
             ]
 
             if missing_keys:
-                log.warning("[DLAA] Texture model missing keys: %s", missing_keys)
+                log.warning("[DLAA] Main model missing keys: %s", missing_keys)
                 
             if load_result.unexpected_keys:
                 log.warning("[DLAA] Main model unexpected keys: %s", load_result.unexpected_keys)
@@ -233,7 +233,7 @@ class VideoTAADLAA:
                 ]
 
                 if missing_keys:
-                    log.warning("[DLAA] Main model missing keys: %s", missing_keys)
+                    log.warning("[DLAA] Texture model missing keys: %s", missing_keys)
                     
                 if load_result.unexpected_keys:
                     log.warning("[DLAA] Texture model unexpected keys: %s", load_result.unexpected_keys)
@@ -1471,7 +1471,7 @@ class VideoTAADLAA:
             1.0,
         )
         
-        if preset in ["Detail"]:
+        if preset == "Detail":
             dark_mask = texture_dark_mask
             micro_limit = micro_limit * (
                 self.detail_dark_mix_base + self.detail_dark_mix_scale * dark_mask
@@ -1597,7 +1597,7 @@ class VideoTAADLAA:
         
         blend_weight = dlaa_strength * self.dlaa_blend_scale
         
-        if preset in ["Detail"]:
+        if preset == "Detail":
             blend_weight = min(blend_weight * self.detail_blend_boost, 1.0)
             
         rgb = torch.lerp(rgb, dlaa_out, blend_weight)
@@ -1773,9 +1773,17 @@ class VideoTAADLAA:
         
         return rgb, prev_dlaa_output, model_delta_value
         
-    def execute(self, images, preset, dlaa_intensity=1.00, texture_intensity=1.00, motion_stability=1.00, detail_intensity=None, **kwargs,):
-        # Main node entry
-        
+    # Main node entry
+    def execute(
+        self,
+        images,
+        preset,
+        dlaa_intensity=1.00,
+        texture_intensity=1.00,
+        motion_stability=1.00,
+        detail_intensity=None,
+        **kwargs,
+    ):
         # Legacy workflow fallback
         if detail_intensity is not None:
             dlaa_intensity = detail_intensity
@@ -1816,7 +1824,6 @@ class VideoTAADLAA:
         progress = ProgressBar(B) if ProgressBar is not None else None
         
         with torch.inference_mode():
-        
             for i in range(B):
                 rgb = self._load_frame(images, i, device)
                 

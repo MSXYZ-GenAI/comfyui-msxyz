@@ -1,24 +1,31 @@
 # Video TAA + DLAA node defaults
 # MSXYZ
 
-NODE_DEFAULTS = {
 
+def _prefixed(prefix, **values):
+    return {
+        f"{prefix}_{name}": value
+        for name, value in values.items()
+    }
+
+
+NODE_DEFAULTS = {
     # Model blend
     "model_weight": 1.00,
     "dlaa_blend_scale": 1.00,
-    
+
     # TAA / jitter
     "taa_alpha": 0.10,
     "jitter_scale": 0.20,
     "edge_threshold": 0.15,
-    
+
     # Highlight handling
     "tone_curve_bias": 0.6,
     "highlight_pre_blend": 0.15,
     "highlight_post_blend": 0.08,
     "highlight_threshold": 0.85,
     "highlight_slope": 12.0,
-    
+
     # Detail shaping
     "detail_base_scale": 9.0,
     "detail_ref_scale": 0.02,
@@ -28,116 +35,149 @@ NODE_DEFAULTS = {
     "detail_max_gain": 0.26,
     "detail_edge_boost": 0.35,
     "detail_highlight_suppression": 0.5,
-    
+
     # Edge detail
     "edge_sharp_threshold": 0.08,
     "edge_sharp_slope": 12.0,
     "edge_aa_slope": 14.0,
     "edge_detail_limit_scale": 0.7,
-    
+
     # Motion handling
     "motion_gate_scale": 12.0,
     "jitter_motion_damping": 8.0,
-    
+
     # Dark-area detail behavior
-    "detail_dark_luma_start": 0.20,
-    "detail_dark_luma_range": 0.30,
-    "detail_dark_mix_base": 0.6,
-    "detail_dark_mix_scale": 0.4,
-    
+    **_prefixed(
+        "detail_dark",
+        luma_start=0.20,
+        luma_range=0.30,
+        mix_base=0.6,
+        mix_scale=0.4,
+    ),
+
     # Detail limits
     "fine_detail_limit": 0.15,
     "detail_highlight_pre_scale": 0.45,
     "detail_highlight_post_scale": 0.50,
     "detail_blend_boost": 1.12,
-    
+
     # Auto preset motion thresholds
     "auto_default_scene_motion": 0.02,
     "auto_static_motion_threshold": 0.015,
     "auto_balanced_motion_threshold": 0.045,
-    
+
     # Luma / saturation boost
     "luma_boost_base": 0.03,
     "saturation_boost_base": 0.06,
     "luma_highlight_protect": 0.6,
     "saturation_highlight_protect": 0.5,
-    
+
     # Texture pass
     "texture_pass_enabled": True,
     "texture_tile_overlap": 32,
     "texture_log_interval": 30,
-    
+
     # Texture shimmer
-    "detail_shimmer_strength": 0.25,
-    "detail_shimmer_threshold": 0.008,
-    "detail_shimmer_slope": 100.0,
-    "detail_shimmer_max_blend": 0.35,
+    **_prefixed(
+        "detail_shimmer",
+        strength=0.25,
+        threshold=0.008,
+        slope=100.0,
+        max_blend=0.35,
+    ),
     "detail_edge_aa_strength": 0.38,
     "photo_edge_aa_strength": 0.25,
-    
+
     # Fine-line AA for thin details
-    "detail_fine_line_aa_strength": 0.45,
-    "detail_fine_line_dark_threshold": 0.34,
-    "detail_fine_line_edge_threshold": 0.075,
-    "detail_fine_line_blur_strength": 0.44,
-    
+    **_prefixed(
+        "detail_fine_line",
+        aa_strength=0.45,
+        dark_threshold=0.34,
+        edge_threshold=0.075,
+        blur_strength=0.44,
+    ),
+
     # Specular detail
-    "detail_specular_strength": 0.12,
-    "detail_specular_threshold": 0.52,
-    "detail_specular_slope": 8.0,
-    "detail_specular_limit": 0.014,
-    "detail_specular_edge_boost": 0.22,
-    
+    **_prefixed(
+        "detail_specular",
+        strength=0.12,
+        threshold=0.52,
+        slope=8.0,
+        limit=0.014,
+        edge_boost=0.22,
+    ),
+
     # Micro-contrast
-    "detail_micro_contrast_strength": 0.045,
-    "detail_micro_contrast_radius": 5,
-    "detail_micro_contrast_limit": 0.016,
-    "detail_micro_contrast_highlight_protect": 0.70,
-    
+    **_prefixed(
+        "detail_micro_contrast",
+        strength=0.045,
+        radius=5,
+        limit=0.016,
+        highlight_protect=0.70,
+    ),
+
     # Edge dehalo
-    "detail_dehalo_strength": 0.14,
-    "detail_dehalo_threshold": 0.095,
-    "detail_dehalo_dark_protect": 0.35,
-    "detail_dehalo_light_protect": 0.55,
-    
+    **_prefixed(
+        "detail_dehalo",
+        strength=0.14,
+        threshold=0.095,
+        dark_protect=0.35,
+        light_protect=0.55,
+    ),
+
     # Chroma edge cleanup
-    "detail_chroma_cleanup_strength": 0.18, # best range 0.10 - 0.25
-    "detail_chroma_edge_threshold": 0.055,
-    "detail_chroma_saturation_threshold": 0.070,
-    "detail_chroma_cleanup_limit": 0.014,
-    "detail_chroma_dark_protect": 0.30,
-    
+    **_prefixed(
+        "detail_chroma",
+        cleanup_strength=0.18,  # best range 0.10 - 0.25
+        edge_threshold=0.055,
+        saturation_threshold=0.070,
+        cleanup_limit=0.014,
+        dark_protect=0.30,
+    ),
+
     # Subpixel edge reconstruction
-    "detail_subpixel_edge_strength": 0.14,  # best range 0.10 - 0.20
-    "detail_subpixel_edge_threshold": 0.070,
-    "detail_subpixel_edge_slope": 16.0,
-    "detail_subpixel_sample_scale": 0.35,
-    "detail_subpixel_blend_limit": 0.24,
-    "detail_subpixel_delta_limit": 0.016,
-    "detail_subpixel_motion_protect": 0.75,
-    
+    **_prefixed(
+        "detail_subpixel",
+        edge_strength=0.14,  # best range 0.10 - 0.20
+        edge_threshold=0.070,
+        edge_slope=16.0,
+        sample_scale=0.35,
+        blend_limit=0.24,
+        delta_limit=0.016,
+        motion_protect=0.75,
+    ),
+
     # Temporal specular stabilizer
-    "detail_specular_temporal_strength": 0.05,  # best range 0.05 - 0.15
-    "detail_specular_temporal_threshold": 0.56,
-    "detail_specular_temporal_slope": 10.0,
-    "detail_specular_temporal_detail_threshold": 0.006,
-    "detail_specular_temporal_blend_limit": 0.18,
-    "detail_specular_temporal_delta_limit": 0.014,
-    "detail_specular_temporal_motion_protect": 0.85,
-    
+    **_prefixed(
+        "detail_specular_temporal",
+        strength=0.05,  # best range 0.05 - 0.15
+        threshold=0.56,
+        slope=10.0,
+        detail_threshold=0.006,
+        blend_limit=0.18,
+        delta_limit=0.014,
+        motion_protect=0.85,
+    ),
+
     # Local tone mapping
-    "detail_local_tonemap_strength": 0.07,  # best range 0.04 - 0.10
-    "detail_local_tonemap_radius": 11,
-    "detail_local_tonemap_limit": 0.018,
-    "detail_local_tonemap_shadow_lift": 0.012,
-    "detail_local_tonemap_shadow_threshold": 0.38,
-    "detail_local_tonemap_highlight_protect": 0.75,
-    "detail_local_tonemap_motion_protect": 0.65,
-    
+    **_prefixed(
+        "detail_local_tonemap",
+        strength=0.07,  # best range 0.04 - 0.10
+        radius=11,
+        limit=0.018,
+        shadow_lift=0.012,
+        shadow_threshold=0.38,
+        highlight_protect=0.75,
+        motion_protect=0.65,
+    ),
+
     # Fur / hair directional stabilizer
-    "detail_fur_stabilizer_strength": 0.08,
-    "detail_fur_edge_threshold": 0.05,
-    "detail_fur_detail_threshold": 0.012,
-    "detail_fur_blend_limit": 0.20,
-    "detail_fur_motion_protect": 0.85,
+    **_prefixed(
+        "detail_fur",
+        stabilizer_strength=0.08,
+        edge_threshold=0.05,
+        detail_threshold=0.012,
+        blend_limit=0.20,
+        motion_protect=0.85,
+    ),
 }
