@@ -11,6 +11,12 @@ try:
 except Exception:
     ProgressBar = None
 
+try:
+    import comfy.model_management as mm
+except ImportError:
+    mm = None
+
+
 EDGE_EPSILON = 1e-6
 EDGE_FADE_WIDTH = 0.10
 LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
@@ -132,6 +138,9 @@ class VideoAdaptiveAA:
         out_tensor = torch.empty_like(images)
 
         for i in range(frame_count):
+            if mm is not None and hasattr(mm, "throw_exception_if_processing_interrupted"):
+                mm.throw_exception_if_processing_interrupted()
+
             frame = images[i:i + 1]
             frame_out = self._apply_aa_frame(
                 frame,
