@@ -18,6 +18,9 @@ def load_package_init():
         submodule_search_locations=[str(ROOT)],
     )
 
+    assert spec is not None
+    assert spec.loader is not None
+
     module = importlib.util.module_from_spec(spec)
     sys.modules[package_name] = module
     spec.loader.exec_module(module)
@@ -38,13 +41,22 @@ def main():
     node = VideoTAADLAA()
 
     input_types = VideoTAADLAA.INPUT_TYPES()
+
     assert "required" in input_types
     assert "optional" in input_types
     assert "images" in input_types["required"]
     assert "preset" in input_types["required"]
 
+    visible_presets = input_types["required"]["preset"][0]
+    assert visible_presets == [
+        "Auto",
+        "Performance",
+        "Balanced",
+        "High Detail",
+    ]
+
     preset, dlaa, texture, motion = node._normalize_run_inputs(
-        "Sharp",
+        "High Detail",
         1.2,
         1.1,
         1.0,
@@ -54,6 +66,15 @@ def main():
     assert dlaa == 1.2
     assert texture == 1.1
     assert motion == 1.0
+
+    preset, _, _, _ = node._normalize_run_inputs(
+        "Sharp",
+        1.0,
+        1.0,
+        1.0,
+    )
+
+    assert preset == "Detail"
 
     preset, _, _, _ = node._normalize_run_inputs(
         "Cinematic",
