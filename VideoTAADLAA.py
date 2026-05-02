@@ -2076,6 +2076,9 @@ class VideoTAADLAA:
         
         with torch.inference_mode():
             for i in range(B):
+                if mm is not None and hasattr(mm, "throw_exception_if_processing_interrupted"):
+                    mm.throw_exception_if_processing_interrupted()
+
                 rgb = self._load_frame(images, i, device)
                 
                 frame_cfg = self._resolve_frame_config(
