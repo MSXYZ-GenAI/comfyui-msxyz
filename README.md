@@ -89,21 +89,22 @@ Add the node to your workflow and choose a preset.
 Recommended starting point:
 
 - Use **Auto** for general footage.
-- Use **Balanced** for stable video cleanup.
-- Use **Detail** for images, hair, fur, wires, and high-detail edges.
-- Use **Smooth** for smoother motion and softer temporal blending. 
+- Use **Performance** for longer videos or faster previews.
+- Use **Balanced** for stable video cleanup with a good quality/speed balance.
+- Use **High Detail** for hair, fur, wires, fine lines, and high-detail edges.
 
 ---
 
-### Presets
-> Presets replace manual parameter tuning and are designed to cover most use cases.
+## Presets
 
-Built-in presets for common use cases:
+The node uses a simple game-style quality preset system:
 
-- **Auto** — balanced default behavior.
-- **Balanced** — stable anti-aliasing with moderate sharpening.
-- **Detail** — stronger edge and detail reconstruction.
-- **Smooth** — smoother temporal blending for softer motion.
+| Preset | Description |
+|---|---|
+| **Auto** | Automatically adjusts settings based on scene motion. Good default for most videos. |
+| **Performance** | Faster processing for longer videos. Uses lighter detail cleanup while keeping the image stable. |
+| **Balanced** | General-purpose preset with a balance between quality and speed. |
+| **High Detail** | Highest quality mode for stronger detail recovery, edge cleanup, and temporal refinement. Slower than other modes. |
 
 Start with **Auto**, then adjust based on your content.
 
