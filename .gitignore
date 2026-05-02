@@ -4,9 +4,10 @@ __pycache__/
 .DS_Store
 venv/
 
-DLAANet_compare.png
-_DLAATexture.pth
-_DLAATexture.safetensors
+DLAA Trainer
+DLAANet.pth
+DLAATexture.pth
 epoch_compare.txt
 node.zip
 run_smoke_test.bat
+logs.txt
