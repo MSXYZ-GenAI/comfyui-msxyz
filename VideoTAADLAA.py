@@ -129,9 +129,6 @@ class VideoTAADLAA:
                     "Performance",
                     "Balanced",
                     "High Detail",
-                    "Detail",
-                    "Smooth",
-                    "Photo",
                 ],),
                 "dlaa_intensity": ("FLOAT", {
                     "default": 1.00,
