@@ -104,7 +104,7 @@ The node uses a simple game-style quality preset system:
 | **Auto** | Automatically adjusts settings based on scene motion. Good default for most videos. |
 | **Performance** | Faster processing for longer videos. Uses lighter detail cleanup while keeping the image stable. |
 | **Balanced** | General-purpose preset with a balance between quality and speed. |
-| **High Detail** | Highest quality mode for stronger detail recovery, edge cleanup, and temporal refinement. Slower than other modes. |
+| **High Detail** | Best quality for fine detail, edge cleanup, and temporal refinement. Slower. |
 
 Start with **Auto**, then adjust based on your content.
 
