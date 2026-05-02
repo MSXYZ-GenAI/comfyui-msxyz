@@ -95,8 +95,6 @@ Recommended starting point:
 
 ---
 
-## Presets
-
 The node uses a simple game-style preset system:
 
 | Preset | Description |
