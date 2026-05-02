@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 try:
     from comfy.utils import ProgressBar
-except Exception:
+except ImportError:
     ProgressBar = None
 
 try:
