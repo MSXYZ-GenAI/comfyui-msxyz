@@ -84,23 +84,6 @@ PRESETS = {
 }
 
 
-SINGLE_IMAGE_DETAIL = {
-    "detail_boost": 0.72,
-    "edge_boost": 0.55,
-    "temporal_strength": 0.00,
-    "micro_limit": 0.012,
-    "luma_boost_mult": 0.88,
-    "saturation_boost_mult": 0.92,
-    "motion_threshold": 0.08,
-    "motion_sensitivity": 1.00,
-    "jitter_scale": 0.00,
-    "taa_strength": 0.00,
-    "dlaa_strength": 0.78,
-    "tone_strength": 0.06,
-    "edge_sharp_strength": 0.08,
-}
-
-
 AUTO_STATIC = frame_preset(
     detail_boost=1.12,
     edge_boost=1.15,

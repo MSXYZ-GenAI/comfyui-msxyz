@@ -41,7 +41,6 @@ try:
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
-        SINGLE_IMAGE_DETAIL,
     )
 except ImportError:
     from presets import (
@@ -52,7 +51,6 @@ except ImportError:
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
-        SINGLE_IMAGE_DETAIL,
     )
 
 try:
@@ -1259,8 +1257,10 @@ class VideoTAADLAA:
         return torch.clamp(current_base + stabilized_detail, 0.0, 1.0)
         
     def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
-        # Auto uses frame history
-        if preset == "Auto":
+        if is_single_image:
+            frame_cfg = PRESETS["Photo"]
+
+        elif preset == "Auto":
             if taa.history is not None and taa.history.shape == rgb.shape:
                 scene_motion = torch.abs(rgb - taa.history).mean().item()
             else:
@@ -1272,9 +1272,6 @@ class VideoTAADLAA:
                 frame_cfg = AUTO_BALANCED
             else:
                 frame_cfg = AUTO_MOTION
-
-        elif is_single_image and preset == "Detail":
-            frame_cfg = SINGLE_IMAGE_DETAIL
 
         else:
             frame_cfg = PRESETS.get(preset, PRESETS["Balanced"])
@@ -2063,6 +2060,7 @@ class VideoTAADLAA:
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
+        run_preset = "Photo" if is_single_image else preset
         
         # Process RGB only, then attach alpha or any extra channels back to the output.
         # This keeps transparent inputs from losing their alpha channel.
@@ -2072,9 +2070,9 @@ class VideoTAADLAA:
 
         out_channels = 3 if extra_channels is None else 3 + extra_channels.shape[-1]
         
-        blur_radius = self._frame_blur_radius(preset, is_single_image)
+        blur_radius = self._frame_blur_radius(run_preset, is_single_image)
         edge_aa_strength = self._frame_edge_aa_strength(
-            preset,
+            run_preset,
             is_single_image,
         )
         
@@ -2083,7 +2081,7 @@ class VideoTAADLAA:
         prev_dlaa_output = None
         
         net = self._net(device)
-        texture_net = self._texture_net_for_run(device, preset, texture_intensity)
+        texture_net = self._texture_net_for_run(device, run_preset, texture_intensity)
         
         out_tensor = torch.empty((B, H, W, out_channels), dtype=images.dtype, device="cpu")
         delta_sum = 0.0
@@ -2105,7 +2103,7 @@ class VideoTAADLAA:
                 rgb = self._load_frame(images, i, device)
                 
                 frame_cfg = self._resolve_frame_config(
-                    preset,
+                    run_preset,
                     is_single_image,
                     rgb,
                     taa,
@@ -2127,7 +2125,7 @@ class VideoTAADLAA:
                     rgb=rgb,
                     net=net,
                     texture_net=texture_net,
-                    preset=preset,
+                    preset=run_preset,
                     tile_size=tile_size,
                     motion_gate=motion_gate,
                     detail_boost=params["detail_boost"],
