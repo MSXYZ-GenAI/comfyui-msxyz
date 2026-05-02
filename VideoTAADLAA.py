@@ -102,6 +102,8 @@ LOCAL_TONEMAP_SHADOW_SLOPE = 10.0
 LOCAL_TONEMAP_RATIO_MIN = 0.90
 LOCAL_TONEMAP_RATIO_MAX = 1.10
 
+JITTER_DAMPING_MIN = 0.45
+
 FUR_DETAIL_SLOPE = 80.0
 
 
@@ -481,7 +483,21 @@ class VideoTAADLAA:
         )
         
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
-        
+
+        tile_size = int(tile_size)
+        overlap = int(overlap)
+
+        if tile_size <= 0:
+            raise ValueError(f"Invalid tile_size: {tile_size}")
+
+        if overlap < 0:
+            raise ValueError(f"Invalid overlap: {overlap}")
+
+        if overlap * 2 >= tile_size:
+            raise ValueError(
+                f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
+            )
+
         # Tile-based inference with border blending.
         B, C, H, W = x.shape
 
@@ -643,10 +659,7 @@ class VideoTAADLAA:
             stride=1,
         )
 
-        blur_strength = max(
-            0.0,
-            min(float(self.detail_fine_line_blur_strength), 1.0),
-        )
+        blur_strength = clamp01(self.detail_fine_line_blur_strength)
 
         aa_target = torch.lerp(
             x,
@@ -1546,7 +1559,7 @@ class VideoTAADLAA:
             )
             
             jitter_damping = min(
-                max(1.0 - motion_value * self.jitter_motion_damping, 0.45),
+                max(1.0 - motion_value * self.jitter_motion_damping, JITTER_DAMPING_MIN),
                 1.0,
             )
             
@@ -2030,6 +2043,12 @@ class VideoTAADLAA:
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
+
+        extra_channels = None
+        if C > 3:
+            extra_channels = images[:, :, :, 3:].detach().cpu()
+
+        out_channels = 3 if extra_channels is None else 3 + extra_channels.shape[-1]
         
         blur_radius = self._frame_blur_radius(preset, is_single_image)
         edge_aa_strength = self._frame_edge_aa_strength(
@@ -2044,7 +2063,7 @@ class VideoTAADLAA:
         net = self._net(device)
         texture_net = self._texture_net_for_run(device, preset, texture_intensity)
         
-        out_tensor = torch.empty((B, H, W, 3), dtype=images.dtype, device="cpu")
+        out_tensor = torch.empty((B, H, W, out_channels), dtype=images.dtype, device="cpu")
         delta_sum = 0.0
         delta_count = 0
         debug_stats = log.isEnabledFor(logging.DEBUG)
@@ -2111,18 +2130,26 @@ class VideoTAADLAA:
 
                 if frame_out.dtype != out_tensor.dtype:
                     frame_out = frame_out.to(out_tensor.dtype)
-                
+
+                if extra_channels is not None:
+                    frame_extra = extra_channels[i:i + 1]
+
+                    if frame_extra.dtype != frame_out.dtype:
+                        frame_extra = frame_extra.to(frame_out.dtype)
+
+                    frame_out = torch.cat((frame_out, frame_extra), dim=-1)
+
                 out_tensor[i:i + 1].copy_(frame_out)
-                
+
                 if progress is not None:
                     progress.update(1)
-                    
+
                 if mm is not None and i > 0 and i % 50 == 0:
                     mm.soft_empty_cache()
-                    
+
         if debug_stats and delta_count > 0:
             log.debug(f"[DLAA] model_delta_avg={delta_sum / delta_count:.6f}")
-            
+
         return (out_tensor,)
 
 
