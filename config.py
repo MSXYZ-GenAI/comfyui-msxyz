@@ -105,14 +105,14 @@ NODE_DEFAULTS = {
     "detail_dehalo_light_protect": 0.55,
 
     # Chroma edge cleanup
-    "detail_chroma_cleanup_strength": 0.18,  # best range 0.10 - 0.25
+    "detail_chroma_cleanup_strength": 0.18,
     "detail_chroma_edge_threshold": 0.055,
     "detail_chroma_saturation_threshold": 0.070,
     "detail_chroma_cleanup_limit": 0.014,
     "detail_chroma_dark_protect": 0.30,
 
     # Subpixel edge reconstruction
-    "detail_subpixel_edge_strength": 0.14,  # best range 0.10 - 0.20
+    "detail_subpixel_edge_strength": 0.14,
     "detail_subpixel_edge_threshold": 0.070,
     "detail_subpixel_edge_slope": 16.0,
     "detail_subpixel_sample_scale": 0.35,
@@ -121,7 +121,7 @@ NODE_DEFAULTS = {
     "detail_subpixel_motion_protect": 0.75,
 
     # Temporal specular stabilizer
-    "detail_specular_temporal_strength": 0.05,  # best range 0.05 - 0.15
+    "detail_specular_temporal_strength": 0.05,
     "detail_specular_temporal_threshold": 0.56,
     "detail_specular_temporal_slope": 10.0,
     "detail_specular_temporal_detail_threshold": 0.006,
@@ -130,7 +130,7 @@ NODE_DEFAULTS = {
     "detail_specular_temporal_motion_protect": 0.85,
 
     # Local tone mapping
-    "detail_local_tonemap_strength": 0.07,  # best range 0.04 - 0.10
+    "detail_local_tonemap_strength": 0.07,
     "detail_local_tonemap_radius": 11,
     "detail_local_tonemap_limit": 0.018,
     "detail_local_tonemap_shadow_lift": 0.012,

@@ -14,25 +14,9 @@ from safetensors.torch import load_file
 
 try:
     from .model import DLAANet
-except ImportError:
-    from model import DLAANet
-
-try:
     from .utils import rgb_luma, clamp01
-except ImportError:
-    from utils import rgb_luma, clamp01
-
-try:
     from .taa import TAAState
-except ImportError:
-    from taa import TAAState
-
-try:
     from .config import NODE_DEFAULTS
-except ImportError:
-    from config import NODE_DEFAULTS
-
-try:
     from .presets import (
         PRESETS,
         AUTO_STATIC,
@@ -43,6 +27,10 @@ try:
         TEXTURE_PRESETS,
     )
 except ImportError:
+    from model import DLAANet
+    from utils import rgb_luma, clamp01
+    from taa import TAAState
+    from config import NODE_DEFAULTS
     from presets import (
         PRESETS,
         AUTO_STATIC,
@@ -124,40 +112,27 @@ class VideoTAADLAA:
     def _load_defaults(self):
         defaults = NODE_DEFAULTS
 
-        self._load_core_defaults(defaults)
-        self._load_detail_defaults(defaults)
-        self._load_runtime_defaults(defaults)
-        self._load_advanced_detail_defaults(defaults)
-
-    def _load_core_defaults(self, defaults):
-        # Model blend
         self.model_weight = defaults["model_weight"]
         self.dlaa_blend_scale = defaults["dlaa_blend_scale"]
 
-        # TAA / jitter
         self.taa_alpha = defaults["taa_alpha"]
         self.jitter_scale = defaults["jitter_scale"]
         self.edge_threshold = defaults["edge_threshold"]
 
-        # Highlight handling
         self.tone_curve_bias = defaults["tone_curve_bias"]
         self.highlight_pre_blend = defaults["highlight_pre_blend"]
         self.highlight_post_blend = defaults["highlight_post_blend"]
         self.highlight_threshold = defaults["highlight_threshold"]
         self.highlight_slope = defaults["highlight_slope"]
 
-        # Edge detail
         self.edge_sharp_threshold = defaults["edge_sharp_threshold"]
         self.edge_sharp_slope = defaults["edge_sharp_slope"]
         self.edge_aa_slope = defaults["edge_aa_slope"]
         self.edge_detail_limit_scale = defaults["edge_detail_limit_scale"]
 
-        # Motion handling
         self.motion_gate_scale = defaults["motion_gate_scale"]
         self.jitter_motion_damping = defaults["jitter_motion_damping"]
 
-    def _load_detail_defaults(self, defaults):
-        # Detail shaping
         self.detail_base_scale = defaults["detail_base_scale"]
         self.detail_ref_scale = defaults["detail_ref_scale"]
         self.detail_min_scale = defaults["detail_min_scale"]
@@ -167,79 +142,64 @@ class VideoTAADLAA:
         self.detail_edge_boost = defaults["detail_edge_boost"]
         self.detail_highlight_suppression = defaults["detail_highlight_suppression"]
 
-        # Dark-area detail behavior
         self.detail_dark_luma_start = defaults["detail_dark_luma_start"]
         self.detail_dark_luma_range = defaults["detail_dark_luma_range"]
         self.detail_dark_mix_base = defaults["detail_dark_mix_base"]
         self.detail_dark_mix_scale = defaults["detail_dark_mix_scale"]
 
-        # Detail limits
         self.fine_detail_limit = defaults["fine_detail_limit"]
         self.detail_highlight_pre_scale = defaults["detail_highlight_pre_scale"]
         self.detail_highlight_post_scale = defaults["detail_highlight_post_scale"]
         self.detail_blend_boost = defaults["detail_blend_boost"]
 
-        # Texture shimmer
         self.detail_shimmer_strength = defaults["detail_shimmer_strength"]
         self.detail_shimmer_threshold = defaults["detail_shimmer_threshold"]
         self.detail_shimmer_slope = defaults["detail_shimmer_slope"]
         self.detail_shimmer_max_blend = defaults["detail_shimmer_max_blend"]
 
-        # Preset edge AA strength
         self.detail_edge_aa_strength = defaults["detail_edge_aa_strength"]
         self.photo_edge_aa_strength = defaults["photo_edge_aa_strength"]
 
-    def _load_runtime_defaults(self, defaults):
-        # Auto preset motion thresholds
         self.auto_default_scene_motion = defaults["auto_default_scene_motion"]
         self.auto_static_motion_threshold = defaults["auto_static_motion_threshold"]
         self.auto_balanced_motion_threshold = defaults["auto_balanced_motion_threshold"]
 
-        # Luma / saturation boost
         self.luma_boost_base = defaults["luma_boost_base"]
         self.saturation_boost_base = defaults["saturation_boost_base"]
         self.luma_highlight_protect = defaults["luma_highlight_protect"]
         self.saturation_highlight_protect = defaults["saturation_highlight_protect"]
 
-        # Texture pass
         self.texture_pass_enabled = defaults["texture_pass_enabled"]
         self.texture_tile_overlap = defaults["texture_tile_overlap"]
         self.texture_log_interval = defaults["texture_log_interval"]
 
-    def _load_advanced_detail_defaults(self, defaults):
-        # Fine-line AA
         self.detail_fine_line_aa_strength = defaults["detail_fine_line_aa_strength"]
         self.detail_fine_line_dark_threshold = defaults["detail_fine_line_dark_threshold"]
         self.detail_fine_line_edge_threshold = defaults["detail_fine_line_edge_threshold"]
         self.detail_fine_line_blur_strength = defaults["detail_fine_line_blur_strength"]
 
-        # Specular detail
         self.detail_specular_strength = defaults["detail_specular_strength"]
         self.detail_specular_threshold = defaults["detail_specular_threshold"]
         self.detail_specular_slope = defaults["detail_specular_slope"]
         self.detail_specular_limit = defaults["detail_specular_limit"]
         self.detail_specular_edge_boost = defaults["detail_specular_edge_boost"]
 
-        # Micro-contrast
         self.detail_micro_contrast_strength = defaults["detail_micro_contrast_strength"]
         self.detail_micro_contrast_radius = defaults["detail_micro_contrast_radius"]
         self.detail_micro_contrast_limit = defaults["detail_micro_contrast_limit"]
         self.detail_micro_contrast_highlight_protect = defaults["detail_micro_contrast_highlight_protect"]
 
-        # Edge dehalo
         self.detail_dehalo_strength = defaults["detail_dehalo_strength"]
         self.detail_dehalo_threshold = defaults["detail_dehalo_threshold"]
         self.detail_dehalo_dark_protect = defaults["detail_dehalo_dark_protect"]
         self.detail_dehalo_light_protect = defaults["detail_dehalo_light_protect"]
 
-        # Chroma edge cleanup
         self.detail_chroma_cleanup_strength = defaults["detail_chroma_cleanup_strength"]
         self.detail_chroma_edge_threshold = defaults["detail_chroma_edge_threshold"]
         self.detail_chroma_saturation_threshold = defaults["detail_chroma_saturation_threshold"]
         self.detail_chroma_cleanup_limit = defaults["detail_chroma_cleanup_limit"]
         self.detail_chroma_dark_protect = defaults["detail_chroma_dark_protect"]
 
-        # Subpixel edge reconstruction
         self.detail_subpixel_edge_strength = defaults["detail_subpixel_edge_strength"]
         self.detail_subpixel_edge_threshold = defaults["detail_subpixel_edge_threshold"]
         self.detail_subpixel_edge_slope = defaults["detail_subpixel_edge_slope"]
@@ -248,7 +208,6 @@ class VideoTAADLAA:
         self.detail_subpixel_delta_limit = defaults["detail_subpixel_delta_limit"]
         self.detail_subpixel_motion_protect = defaults["detail_subpixel_motion_protect"]
 
-        # Temporal specular stabilizer
         self.detail_specular_temporal_strength = defaults["detail_specular_temporal_strength"]
         self.detail_specular_temporal_threshold = defaults["detail_specular_temporal_threshold"]
         self.detail_specular_temporal_slope = defaults["detail_specular_temporal_slope"]
@@ -257,7 +216,6 @@ class VideoTAADLAA:
         self.detail_specular_temporal_delta_limit = defaults["detail_specular_temporal_delta_limit"]
         self.detail_specular_temporal_motion_protect = defaults["detail_specular_temporal_motion_protect"]
 
-        # Local tone mapping
         self.detail_local_tonemap_strength = defaults["detail_local_tonemap_strength"]
         self.detail_local_tonemap_radius = defaults["detail_local_tonemap_radius"]
         self.detail_local_tonemap_limit = defaults["detail_local_tonemap_limit"]
@@ -266,7 +224,6 @@ class VideoTAADLAA:
         self.detail_local_tonemap_highlight_protect = defaults["detail_local_tonemap_highlight_protect"]
         self.detail_local_tonemap_motion_protect = defaults["detail_local_tonemap_motion_protect"]
 
-        # Fur / hair stabilizer
         self.detail_fur_stabilizer_strength = defaults["detail_fur_stabilizer_strength"]
         self.detail_fur_edge_threshold = defaults["detail_fur_edge_threshold"]
         self.detail_fur_detail_threshold = defaults["detail_fur_detail_threshold"]
@@ -455,7 +412,7 @@ class VideoTAADLAA:
                         f"[DLAA] Texture model could not be loaded, skipping texture pass: {type(e).__name__}: {e!r}"
                     )
                 return None
-                
+
     def _tile_weight_map(self, th, tw, overlap, device, dtype):
         w_y = torch.ones(th, device=device, dtype=dtype)
         w_x = torch.ones(tw, device=device, dtype=dtype)
@@ -476,12 +433,12 @@ class VideoTAADLAA:
 
             w_x[:ramp] = values
             w_x[-ramp:] = torch.flip(values, dims=[0])
-            
+
         return torch.minimum(
             w_y.view(1, 1, th, 1),
             w_x.view(1, 1, 1, tw)
         )
-        
+
     def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
 
         tile_size = int(tile_size)
@@ -506,7 +463,7 @@ class VideoTAADLAA:
 
 
         step = tile_size - overlap * 2
-        
+
         # avoid stuck tiling
         if step <= 0:
             raise ValueError(
@@ -626,7 +583,7 @@ class VideoTAADLAA:
         )
 
         return x * (1.0 - mask) + blurred * mask
-        
+
     def _fine_line_aa(self, x, net, strength):
         strength = clamp01(strength)
 
@@ -670,7 +627,7 @@ class VideoTAADLAA:
         blend = (line_mask * strength).clamp(0.0, 1.0)
 
         return torch.lerp(x, aa_target, blend).clamp(0.0, 1.0)
-    
+
     def _specular_detail(self, x, net, highlight_mask, strength):
         strength = clamp01(strength)
 
@@ -712,7 +669,7 @@ class VideoTAADLAA:
             spec_mask = spec_mask * (1.0 - highlight_mask * SPECULAR_HIGHLIGHT_SUPPRESSION)
 
         return (x + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
-        
+
     def _micro_contrast(self, x, highlight_mask, strength):
         strength = clamp01(strength)
 
@@ -807,7 +764,7 @@ class VideoTAADLAA:
         out = x - bright_reduce + dark_reduce
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _chroma_edge_cleanup(
         self,
         x: torch.Tensor,
@@ -869,7 +826,7 @@ class VideoTAADLAA:
         out = out - luma_error
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _subpixel_edge_reconstruction(
         self,
         x: torch.Tensor,
@@ -956,7 +913,7 @@ class VideoTAADLAA:
         out = x + delta * blend
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _temporal_specular_stabilizer(
         self,
         x: torch.Tensor,
@@ -1041,7 +998,7 @@ class VideoTAADLAA:
         out = x + delta
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _local_tone_mapping(
         self,
         x: torch.Tensor,
@@ -1122,7 +1079,7 @@ class VideoTAADLAA:
         out = x * ratio
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _fur_hair_stabilizer(
         self,
         x: torch.Tensor,
@@ -1183,7 +1140,7 @@ class VideoTAADLAA:
         out = base + stabilized_detail
 
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
         if previous is None:
             return current
@@ -1201,7 +1158,7 @@ class VideoTAADLAA:
 
         refined = current * (1.0 - blend_mask) + previous * blend_mask
         return refined.clamp(0.0, 1.0)
-        
+
     def _stabilize_fine_detail(
         self,
         current,
@@ -1255,7 +1212,7 @@ class VideoTAADLAA:
         )
 
         return torch.clamp(current_base + stabilized_detail, 0.0, 1.0)
-        
+
     def _resolve_frame_config(self, preset, is_single_image, rgb, taa):
         if is_single_image:
             frame_cfg = PRESETS["Photo"]
@@ -1278,7 +1235,7 @@ class VideoTAADLAA:
 
         cfg = frame_cfg.copy()
         return cfg
-        
+
     def _apply_texture_pass(
         self,
         texture_net,
@@ -1415,7 +1372,7 @@ class VideoTAADLAA:
             )
             
         return torch.clamp(out, 0.0, 1.0)
-        
+
     def _normalize_run_inputs(
         self,
         preset,
@@ -1436,13 +1393,13 @@ class VideoTAADLAA:
         motion_stability = max(0.5, min(float(motion_stability), 2.0))
 
         return preset, dlaa_intensity, texture_intensity, motion_stability
-        
+
     def _get_device(self):
         if mm is not None:
             return mm.get_torch_device()
             
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
     def _frame_blur_radius(self, preset, is_single_image):
         if is_single_image:
             if preset == "Photo":
@@ -1450,7 +1407,7 @@ class VideoTAADLAA:
             return 0
 
         return 1
-        
+
     def _frame_edge_aa_strength(self, preset, is_single_image):
         if is_single_image:
             if preset == "Photo":
@@ -1464,7 +1421,7 @@ class VideoTAADLAA:
             return self.photo_edge_aa_strength
             
         return 1.0
-        
+
     def _vram_mb(self, device):
         try:
             torch_device = torch.device(device)
@@ -1483,7 +1440,7 @@ class VideoTAADLAA:
             return torch.cuda.get_device_properties(device_index).total_memory // (1024 * 1024)
         except Exception:
             return 0
-            
+
     def _tile_size_for_vram(self, vram_mb):
         if vram_mb <= 8192:
             return 512
@@ -1504,7 +1461,7 @@ class VideoTAADLAA:
     def _load_frame(self, images, frame_index, device):
         img = images[frame_index:frame_index + 1].to(device).permute(0, 3, 1, 2).float()
         return img[:, :3]
-        
+
     def _texture_net_for_run(self, device, preset, texture_intensity):
         texture_cfg = self.texture_presets.get(preset, self.texture_presets["Balanced"])
         
@@ -1524,7 +1481,7 @@ class VideoTAADLAA:
             return None
 
         return self._texture_net(device)
-        
+
     def _frame_params(self, frame_cfg, dlaa_intensity):
         params = frame_cfg.copy()
 
@@ -1539,7 +1496,7 @@ class VideoTAADLAA:
             params[name] *= dlaa_intensity
 
         return params
-        
+
     def _apply_jitter_and_taa(
         self,
         rgb,
@@ -1592,7 +1549,7 @@ class VideoTAADLAA:
         rgb = torch.lerp(rgb, taa_out, taa_strength)
         
         return rgb, motion_gate
-        
+
     def _run_dlaa_with_retry(self, net, rgb, tile_size, debug_stats, frame_index):
         current_tile_size = tile_size
         min_tile_size = 128
@@ -1641,7 +1598,7 @@ class VideoTAADLAA:
             raise RuntimeError("DLAA tiled inference failed.")
             
         return dlaa_out, current_tile_size
-        
+
     def _apply_model_residual(
         self,
         rgb,
@@ -1676,7 +1633,7 @@ class VideoTAADLAA:
             log.debug(f"[DLAA] model_delta_first={model_delta_value:.6f}")
             
         return dlaa_out, model_delta_value
-        
+
     def _apply_highlight_preblend(self, dlaa_out, rgb, preset):
         luma = rgb_luma(dlaa_out)
         highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
@@ -1690,7 +1647,7 @@ class VideoTAADLAA:
         dlaa_out = torch.clamp(dlaa_out, 0.0, 1.0)
         
         return dlaa_out, highlight_mask
-        
+
     def _apply_motion_suppression(
         self,
         preset,
@@ -1707,7 +1664,7 @@ class VideoTAADLAA:
         micro_limit *= (1.0 - motion_gate * motion_cfg["micro"] * motion_stability)
         
         return detail_boost, edge_boost, micro_limit
-        
+
     def _apply_detail_pass(
         self,
         dlaa_out,
@@ -1787,7 +1744,7 @@ class VideoTAADLAA:
         dlaa_out = dlaa_out + edge_boosted
         
         return dlaa_out, texture_dark_mask
-        
+
     def _apply_tone_and_color_pass(
         self,
         dlaa_out,
@@ -1823,7 +1780,7 @@ class VideoTAADLAA:
         dlaa_out = torch.lerp(dlaa_out, rgb, highlight_mask * highlight_post_blend)
         
         return torch.clamp(dlaa_out, 0.0, 1.0)
-        
+
     def _apply_final_temporal_and_blend(
         self,
         rgb,
@@ -1865,7 +1822,7 @@ class VideoTAADLAA:
         rgb = torch.lerp(rgb, dlaa_out, blend_weight)
         
         return rgb, prev_dlaa_output
-        
+
     def _apply_dlaa_pipeline(
         self,
         rgb,
@@ -2034,7 +1991,7 @@ class VideoTAADLAA:
         )
         
         return rgb, prev_dlaa_output, model_delta_value
-        
+
     # Main node entry
     def execute(
         self,
