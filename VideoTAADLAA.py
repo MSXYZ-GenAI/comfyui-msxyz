@@ -1491,12 +1491,6 @@ class VideoTAADLAA:
 
         return 1536
 
-    #def _tile_size_for_vram(self, vram_mb):
-    #    if vram_mb <= 8192:
-    #        return 512
-    #
-    #    return 1024
-
     def _log_tiling(self, height, width, tile_size):
         if height <= tile_size and width <= tile_size:
             return
