@@ -125,8 +125,6 @@ class VideoTAADLAA:
             "required": {
                 "images": ("IMAGE",),
                 "preset": (["Auto", "Balanced", "Detail", "Smooth", "Photo"],),
-            },
-            "optional": {
                 "dlaa_intensity": ("FLOAT", {
                     "default": 1.00,
                     "min": 0.00,
@@ -145,9 +143,10 @@ class VideoTAADLAA:
                     "max": 2.00,
                     "step": 0.05,
                 }),
-            }
+            },
+            "optional": {},
         }
-        
+
     RETURN_TYPES = ("IMAGE",)
     FUNCTION     = "execute"
     CATEGORY     = "CustomPostProcess"
@@ -827,7 +826,7 @@ class VideoTAADLAA:
         )
         
         # Specular detail is treated as positive high-frequency residual.
-        # Blending only this residual helps reduce sparkle flicker without smearing the whole frame.
+        # Blend only the bright residual to reduce sparkle without smearing the frame.
         current_spec = (x - local_avg).clamp(min=0.0)
         previous_spec = (previous - prev_local_avg).clamp(min=0.0)
 
