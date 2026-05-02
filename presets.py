@@ -32,8 +32,8 @@ def frame_preset(
         "motion_sensitivity": motion_sensitivity,
         "jitter_scale": jitter_scale,
     }
-    
-    
+
+
 PRESETS = {
     "Balanced": frame_preset(),
 
@@ -82,6 +82,24 @@ PRESETS = {
         jitter_scale=0.0,
     ),
 }
+
+
+SINGLE_IMAGE_DETAIL = {
+    "detail_boost": 0.78,
+    "edge_boost": 0.68,
+    "temporal_strength": 0.00,
+    "micro_limit": 0.012,
+    "luma_boost_mult": 0.85,
+    "saturation_boost_mult": 0.90,
+    "motion_threshold": 0.08,
+    "motion_sensitivity": 1.00,
+    "jitter_scale": 0.00,
+    "taa_strength": 0.00,
+    "dlaa_strength": 0.88,
+    "tone_strength": 0.75,
+    "edge_sharp_strength": 0.72,
+}
+
 
 AUTO_STATIC = frame_preset(
     detail_boost=1.12,
@@ -166,8 +184,8 @@ def texture_preset(
         "edge_threshold": edge_threshold,
         "edge_slope": edge_slope,
     }
-    
-    
+
+
 TEXTURE_PRESETS = {
     "Detail": texture_preset(
         strength=1.25,

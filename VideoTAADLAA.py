@@ -41,6 +41,7 @@ try:
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
+        SINGLE_IMAGE_DETAIL,
     )
 except ImportError:
     from presets import (
@@ -51,6 +52,7 @@ except ImportError:
         MOTION_SUPPRESSION,
         PRESET_MODEL_WEIGHT,
         TEXTURE_PRESETS,
+        SINGLE_IMAGE_DETAIL,
     )
 
 try:
@@ -1270,11 +1272,14 @@ class VideoTAADLAA:
                 frame_cfg = AUTO_BALANCED
             else:
                 frame_cfg = AUTO_MOTION
+
+        elif is_single_image and preset == "Detail":
+            frame_cfg = SINGLE_IMAGE_DETAIL
+
         else:
             frame_cfg = PRESETS.get(preset, PRESETS["Balanced"])
 
         cfg = frame_cfg.copy()
-
         return cfg
         
     def _apply_texture_pass(
