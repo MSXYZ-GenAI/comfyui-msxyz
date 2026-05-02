@@ -24,7 +24,6 @@ Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines
 ---
 
 ### Models
-
 **DLAANet.safetensors** is the main 1x DLAA refinement model for reducing aliasing artifacts while preserving edge sharpness.
 **DLAATexture.safetensors** is a 1x detail refinement model for restoring fine texture and micro-detail after the DLAA pass.
 
@@ -33,14 +32,11 @@ Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines
 ---
 
 ## Features
-- **Temporal Anti-Aliasing (TAA):** Blends frame history to reduce flicker and sub-pixel jitter.
-- **Neural Reconstruction:** DLAA-inspired model for high-quality edge restoration.
-- **Hybrid Pipeline:** Combines temporal accumulation with neural reconstruction for stable, high-quality results.
-- **Reduced Ghosting:** Motion-aware suppression to minimize trailing artifacts in fast motion.
-- **4-Offset Jitter:** Deterministic sub-pixel jitter for sharper and more stable reconstruction.
-- **Edge-Preserving Clarity:** Sobel-based detection preserves fine textures while reducing aliasing.
-- **Frequency-Aware Refinement:** Uses frequency and perceptual losses for cleaner, sharper results.
-- **Lightweight Model:** Optimized for fast inference with minimal VRAM usage.
+- **Temporal stability:** Reduces flicker, shimmer, and sub-pixel jitter across frames.
+- **DLAA-inspired refinement:** Improves edge quality while keeping the original resolution.
+- **Motion-aware cleanup:** Helps reduce ghosting and trailing artifacts in moving scenes.
+- **Edge-preserving detail:** Uses edge detection to clean aliasing without over-blurring fine texture.
+- **Lightweight inference:** Designed for ComfyUI post-processing with modest VRAM usage.
 
 ---
 
@@ -83,7 +79,6 @@ Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines
 ---
 
 ## 🚀 How to use
-
 Add the node to your workflow and choose a preset.
 
 Recommended starting point:
@@ -109,7 +104,6 @@ Start with **Auto**, then adjust based on your content.
 ---
 
 ## Installation
-
 1. Install via **ComfyUI Manager** (Search for "Anti-Aliasing Pack") or clone this repo into your `custom_nodes` folder.
 2. **Note:** The required models will be automatically downloaded when you first run the node. 
 3. No additional Python dependencies (requirements) are required.
