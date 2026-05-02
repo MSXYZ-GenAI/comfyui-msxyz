@@ -863,7 +863,8 @@ class VideoTAADLAA:
         clean_chroma = chroma + chroma_delta * mask * strength
         out = luma + clean_chroma
 
-        # keep luma stable while cleaning chroma
+        # Chroma cleanup should not change perceived brightness.
+        # Broadcast the single-channel luma correction over RGB to keep the original luma target.
         luma_error = rgb_luma(out) - luma
         out = out - luma_error
 
@@ -893,7 +894,9 @@ class VideoTAADLAA:
         )
 
         B, C, H, W = x.shape
-
+        
+        # Use the Sobel direction as a local edge normal.
+        # Sampling both sides of the edge gives a small reconstruction target without inventing new detail.
         nx = sx / edge.clamp(min=1e-6)
         ny = sy / edge.clamp(min=1e-6)
 
@@ -930,7 +933,8 @@ class VideoTAADLAA:
             padding_mode="reflection",
             align_corners=False,
         )
-
+        
+        # Average the two offset samples and limit the delta so thin edges improve gently.
         reconstructed = (sample_pos + sample_neg) * 0.5
 
         delta = reconstructed - x
@@ -982,7 +986,9 @@ class VideoTAADLAA:
             3,
             stride=1,
         )
-
+        
+        # Specular detail is treated as positive high-frequency residual.
+        # Blending only this residual helps reduce sparkle flicker without smearing the whole frame.
         current_spec = (x - local_avg).clamp(min=0.0)
         previous_spec = (previous - prev_local_avg).clamp(min=0.0)
 
@@ -997,7 +1003,9 @@ class VideoTAADLAA:
             (spec_energy - self.detail_specular_temporal_detail_threshold) *
             TEMPORAL_SPEC_DETAIL_SLOPE
         )
-
+        
+        # Stabilize only pixels that are locally stable between frames.
+        # Moving highlights should stay responsive instead of being pulled from history.
         local_motion = torch.abs(luma - prev_luma)
         local_stable = 1.0 - torch.clamp(
             local_motion / TEMPORAL_SPEC_MOTION_SCALE,
@@ -1105,7 +1113,8 @@ class VideoTAADLAA:
             -self.detail_local_tonemap_limit,
             self.detail_local_tonemap_limit,
         )
-
+        
+        # Apply tone changes as a luma ratio so RGB color balance is mostly preserved.
         target_luma = (luma + luma_delta).clamp(0.0, 1.0)
 
         ratio = target_luma / luma.clamp(min=1e-6)
@@ -1636,14 +1645,16 @@ class VideoTAADLAA:
         debug_stats,
         frame_index,
     ):
-        # keep brightness stable
+        # The model can slightly shift global brightness.
+        # Match the model output mean back to the source frame before blending.
         dlaa_mean = dlaa_out.mean(dim=(1, 2, 3), keepdim=True)
         rgb_mean = rgb.mean(dim=(1, 2, 3), keepdim=True)
         dlaa_out = dlaa_out - dlaa_mean + rgb_mean
         
         preset_model_weight = self.preset_model_weight.get(preset, 1.00)
         
-        # residual model pass
+        # Use the model as a residual correction instead of replacing the frame outright.
+        # This keeps the node closer to the original image and reduces over-processing.
         model_delta = dlaa_out - rgb
         
         model_delta_value = None
@@ -1665,7 +1676,8 @@ class VideoTAADLAA:
         luma = rgb_luma(dlaa_out)
         highlight_mask = torch.sigmoid((luma - self.highlight_threshold) * self.highlight_slope)
         
-        # protect highlights early
+        # Pull very bright areas slightly back toward the source frame.
+        # This helps avoid clipped or plastic-looking highlights after detail passes.
         highlight_pre_blend = self.highlight_pre_blend * (
             self.detail_highlight_pre_scale if preset == "Detail" else 1.0
         )
@@ -2043,7 +2055,9 @@ class VideoTAADLAA:
         
         B, H, W, C = images.shape
         is_single_image = (B == 1)
-
+        
+        # Process RGB only, then attach alpha or any extra channels back to the output.
+        # This keeps transparent inputs from losing their alpha channel.
         extra_channels = None
         if C > 3:
             extra_channels = images[:, :, :, 3:].detach().cpu()
@@ -2076,6 +2090,7 @@ class VideoTAADLAA:
         
         with torch.inference_mode():
             for i in range(B):
+                # Let ComfyUI cancel long video runs between frames.
                 if mm is not None and hasattr(mm, "throw_exception_if_processing_interrupted"):
                     mm.throw_exception_if_processing_interrupted()
 
