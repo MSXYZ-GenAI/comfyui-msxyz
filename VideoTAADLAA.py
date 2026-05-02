@@ -16,7 +16,7 @@ try:
     from .model import DLAANet
     from .utils import rgb_luma, clamp01
     from .taa import TAAState
-    from .config import NODE_DEFAULTS
+    from .config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS
     from .presets import (
         PRESETS,
         AUTO_STATIC,
@@ -30,7 +30,7 @@ except ImportError:
     from model import DLAANet
     from utils import rgb_luma, clamp01
     from taa import TAAState
-    from config import NODE_DEFAULTS
+    from config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS
     from presets import (
         PRESETS,
         AUTO_STATIC,
@@ -110,126 +110,9 @@ class VideoTAADLAA:
         self.texture_presets = TEXTURE_PRESETS
 
     def _load_defaults(self):
-        defaults = NODE_DEFAULTS
+        for name in NODE_DEFAULT_FIELDS:
+            setattr(self, name, NODE_DEFAULTS[name])
 
-        self.model_weight = defaults["model_weight"]
-        self.dlaa_blend_scale = defaults["dlaa_blend_scale"]
-
-        self.taa_alpha = defaults["taa_alpha"]
-        self.jitter_scale = defaults["jitter_scale"]
-        self.edge_threshold = defaults["edge_threshold"]
-
-        self.tone_curve_bias = defaults["tone_curve_bias"]
-        self.highlight_pre_blend = defaults["highlight_pre_blend"]
-        self.highlight_post_blend = defaults["highlight_post_blend"]
-        self.highlight_threshold = defaults["highlight_threshold"]
-        self.highlight_slope = defaults["highlight_slope"]
-
-        self.edge_sharp_threshold = defaults["edge_sharp_threshold"]
-        self.edge_sharp_slope = defaults["edge_sharp_slope"]
-        self.edge_aa_slope = defaults["edge_aa_slope"]
-        self.edge_detail_limit_scale = defaults["edge_detail_limit_scale"]
-
-        self.motion_gate_scale = defaults["motion_gate_scale"]
-        self.jitter_motion_damping = defaults["jitter_motion_damping"]
-
-        self.detail_base_scale = defaults["detail_base_scale"]
-        self.detail_ref_scale = defaults["detail_ref_scale"]
-        self.detail_min_scale = defaults["detail_min_scale"]
-        self.detail_max_scale = defaults["detail_max_scale"]
-        self.detail_min_gain = defaults["detail_min_gain"]
-        self.detail_max_gain = defaults["detail_max_gain"]
-        self.detail_edge_boost = defaults["detail_edge_boost"]
-        self.detail_highlight_suppression = defaults["detail_highlight_suppression"]
-
-        self.detail_dark_luma_start = defaults["detail_dark_luma_start"]
-        self.detail_dark_luma_range = defaults["detail_dark_luma_range"]
-        self.detail_dark_mix_base = defaults["detail_dark_mix_base"]
-        self.detail_dark_mix_scale = defaults["detail_dark_mix_scale"]
-
-        self.fine_detail_limit = defaults["fine_detail_limit"]
-        self.detail_highlight_pre_scale = defaults["detail_highlight_pre_scale"]
-        self.detail_highlight_post_scale = defaults["detail_highlight_post_scale"]
-        self.detail_blend_boost = defaults["detail_blend_boost"]
-
-        self.detail_shimmer_strength = defaults["detail_shimmer_strength"]
-        self.detail_shimmer_threshold = defaults["detail_shimmer_threshold"]
-        self.detail_shimmer_slope = defaults["detail_shimmer_slope"]
-        self.detail_shimmer_max_blend = defaults["detail_shimmer_max_blend"]
-
-        self.detail_edge_aa_strength = defaults["detail_edge_aa_strength"]
-        self.photo_edge_aa_strength = defaults["photo_edge_aa_strength"]
-
-        self.auto_default_scene_motion = defaults["auto_default_scene_motion"]
-        self.auto_static_motion_threshold = defaults["auto_static_motion_threshold"]
-        self.auto_balanced_motion_threshold = defaults["auto_balanced_motion_threshold"]
-
-        self.luma_boost_base = defaults["luma_boost_base"]
-        self.saturation_boost_base = defaults["saturation_boost_base"]
-        self.luma_highlight_protect = defaults["luma_highlight_protect"]
-        self.saturation_highlight_protect = defaults["saturation_highlight_protect"]
-
-        self.texture_pass_enabled = defaults["texture_pass_enabled"]
-        self.texture_tile_overlap = defaults["texture_tile_overlap"]
-        self.texture_log_interval = defaults["texture_log_interval"]
-
-        self.detail_fine_line_aa_strength = defaults["detail_fine_line_aa_strength"]
-        self.detail_fine_line_dark_threshold = defaults["detail_fine_line_dark_threshold"]
-        self.detail_fine_line_edge_threshold = defaults["detail_fine_line_edge_threshold"]
-        self.detail_fine_line_blur_strength = defaults["detail_fine_line_blur_strength"]
-
-        self.detail_specular_strength = defaults["detail_specular_strength"]
-        self.detail_specular_threshold = defaults["detail_specular_threshold"]
-        self.detail_specular_slope = defaults["detail_specular_slope"]
-        self.detail_specular_limit = defaults["detail_specular_limit"]
-        self.detail_specular_edge_boost = defaults["detail_specular_edge_boost"]
-
-        self.detail_micro_contrast_strength = defaults["detail_micro_contrast_strength"]
-        self.detail_micro_contrast_radius = defaults["detail_micro_contrast_radius"]
-        self.detail_micro_contrast_limit = defaults["detail_micro_contrast_limit"]
-        self.detail_micro_contrast_highlight_protect = defaults["detail_micro_contrast_highlight_protect"]
-
-        self.detail_dehalo_strength = defaults["detail_dehalo_strength"]
-        self.detail_dehalo_threshold = defaults["detail_dehalo_threshold"]
-        self.detail_dehalo_dark_protect = defaults["detail_dehalo_dark_protect"]
-        self.detail_dehalo_light_protect = defaults["detail_dehalo_light_protect"]
-
-        self.detail_chroma_cleanup_strength = defaults["detail_chroma_cleanup_strength"]
-        self.detail_chroma_edge_threshold = defaults["detail_chroma_edge_threshold"]
-        self.detail_chroma_saturation_threshold = defaults["detail_chroma_saturation_threshold"]
-        self.detail_chroma_cleanup_limit = defaults["detail_chroma_cleanup_limit"]
-        self.detail_chroma_dark_protect = defaults["detail_chroma_dark_protect"]
-
-        self.detail_subpixel_edge_strength = defaults["detail_subpixel_edge_strength"]
-        self.detail_subpixel_edge_threshold = defaults["detail_subpixel_edge_threshold"]
-        self.detail_subpixel_edge_slope = defaults["detail_subpixel_edge_slope"]
-        self.detail_subpixel_sample_scale = defaults["detail_subpixel_sample_scale"]
-        self.detail_subpixel_blend_limit = defaults["detail_subpixel_blend_limit"]
-        self.detail_subpixel_delta_limit = defaults["detail_subpixel_delta_limit"]
-        self.detail_subpixel_motion_protect = defaults["detail_subpixel_motion_protect"]
-
-        self.detail_specular_temporal_strength = defaults["detail_specular_temporal_strength"]
-        self.detail_specular_temporal_threshold = defaults["detail_specular_temporal_threshold"]
-        self.detail_specular_temporal_slope = defaults["detail_specular_temporal_slope"]
-        self.detail_specular_temporal_detail_threshold = defaults["detail_specular_temporal_detail_threshold"]
-        self.detail_specular_temporal_blend_limit = defaults["detail_specular_temporal_blend_limit"]
-        self.detail_specular_temporal_delta_limit = defaults["detail_specular_temporal_delta_limit"]
-        self.detail_specular_temporal_motion_protect = defaults["detail_specular_temporal_motion_protect"]
-
-        self.detail_local_tonemap_strength = defaults["detail_local_tonemap_strength"]
-        self.detail_local_tonemap_radius = defaults["detail_local_tonemap_radius"]
-        self.detail_local_tonemap_limit = defaults["detail_local_tonemap_limit"]
-        self.detail_local_tonemap_shadow_lift = defaults["detail_local_tonemap_shadow_lift"]
-        self.detail_local_tonemap_shadow_threshold = defaults["detail_local_tonemap_shadow_threshold"]
-        self.detail_local_tonemap_highlight_protect = defaults["detail_local_tonemap_highlight_protect"]
-        self.detail_local_tonemap_motion_protect = defaults["detail_local_tonemap_motion_protect"]
-
-        self.detail_fur_stabilizer_strength = defaults["detail_fur_stabilizer_strength"]
-        self.detail_fur_edge_threshold = defaults["detail_fur_edge_threshold"]
-        self.detail_fur_detail_threshold = defaults["detail_fur_detail_threshold"]
-        self.detail_fur_blend_limit = defaults["detail_fur_blend_limit"]
-        self.detail_fur_motion_protect = defaults["detail_fur_motion_protect"]
-        
     def _first_time(self, key):
         if key in self._seen_warnings:
             return False
@@ -1677,7 +1560,6 @@ class VideoTAADLAA:
         highlight_mask,
     ):
         
-
         local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
         fine_detail_rgb = dlaa_out - local_avg_rgb
         
@@ -1802,7 +1684,6 @@ class VideoTAADLAA:
                 strength=self.detail_shimmer_strength,
                 motion_threshold=motion_threshold,
             )
-
 
         dlaa_out = self._temporal_refine(
             dlaa_out,
