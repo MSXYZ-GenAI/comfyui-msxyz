@@ -68,7 +68,9 @@ log = logging.getLogger("VideoTAADLAA")
 
 MIN_EFFECT_STRENGTH = 1e-5
 
-# Internal visual tuning constants
+
+# Internal visual tuning constants.
+# Tuned by visual tests and kept out of the UI to avoid exposing too many controls.
 FINE_LINE_DARK_SLOPE = 12.0
 
 SPECULAR_CLIP_LUMA = 0.92
