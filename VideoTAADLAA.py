@@ -124,7 +124,7 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "preset": (["Auto", "Balanced", "Detail", "Smooth", "Photo"],),
+                "preset": (["Auto", "Performance", "Balanced", "High Detail"],),
                 "dlaa_intensity": ("FLOAT", {
                     "default": 1.00,
                     "min": 0.00,
@@ -1265,6 +1265,7 @@ class VideoTAADLAA:
         old_presets = {
             "Sharp": "Detail",
             "Cinematic": "Smooth",
+            "High Detail": "Detail",
         }
 
         preset = old_presets.get(preset, preset)
@@ -1294,13 +1295,13 @@ class VideoTAADLAA:
             if preset == "Photo":
                 return self.photo_edge_aa_strength
             return 0.0
-            
+
         if preset == "Detail":
             return self.detail_edge_aa_strength
-            
+
         if preset == "Photo":
             return self.photo_edge_aa_strength
-            
+
         return 1.0
 
     def _vram_mb(self, device):
@@ -1731,6 +1732,10 @@ class VideoTAADLAA:
         if dlaa_strength <= 0:
             return rgb, prev_dlaa_output, None
 
+        is_detail = preset == "Detail"
+        is_performance = preset == "Performance"
+        perf_scale = 0.75 if is_performance else 1.0
+
         dlaa_out, tile = self._run_dlaa_with_retry(
             net,
             rgb,
@@ -1773,11 +1778,11 @@ class VideoTAADLAA:
             highlight_mask,
         )
         
-        if preset == "Detail":
+        if is_detail or is_performance:
             dlaa_out = self._fine_line_aa(
                 dlaa_out,
                 net,
-                self.detail_fine_line_aa_strength,
+                self.detail_fine_line_aa_strength * perf_scale,
             )
             
         dlaa_out = self._apply_texture_pass(
@@ -1793,39 +1798,41 @@ class VideoTAADLAA:
             frame_index=frame_index,
         )
         
-        if preset == "Detail":
+        if is_detail:
             dlaa_out = self._specular_detail(
                 dlaa_out,
                 net,
                 highlight_mask,
                 self.detail_specular_strength,
             )
-            
+
+        if is_detail or is_performance:
             dlaa_out = self._micro_contrast(
                 dlaa_out,
                 highlight_mask,
-                self.detail_micro_contrast_strength,
+                self.detail_micro_contrast_strength * perf_scale,
             )
-            
+
             dlaa_out = self._edge_dehalo(
                 dlaa_out,
                 net,
-                self.detail_dehalo_strength,
+                self.detail_dehalo_strength * perf_scale,
             )
-            
+
+            dlaa_out = self._chroma_edge_cleanup(
+                dlaa_out,
+                net,
+                self.detail_chroma_cleanup_strength * perf_scale,
+            )
+
+        if is_detail:
             dlaa_out = self._subpixel_edge_reconstruction(
                 dlaa_out,
                 net,
                 motion_gate,
                 self.detail_subpixel_edge_strength,
             )
-            
-            dlaa_out = self._chroma_edge_cleanup(
-                dlaa_out,
-                net,
-                self.detail_chroma_cleanup_strength,
-            )
-            
+
             dlaa_out = self._local_tone_mapping(
                 dlaa_out,
                 highlight_mask,

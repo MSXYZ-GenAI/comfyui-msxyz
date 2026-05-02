@@ -36,6 +36,22 @@ def frame_preset(
 
 PRESETS = {
     "Balanced": frame_preset(),
+    
+    "Performance": frame_preset(
+        detail_boost=1.05,
+        edge_boost=1.05,
+        temporal_strength=0.24,
+        micro_limit=0.026,
+        luma_boost_mult=0.96,
+        saturation_boost_mult=0.92,
+        motion_threshold=0.085,
+        taa_strength=0.42,
+        dlaa_strength=0.85,
+        tone_strength=0.10,
+        edge_sharp_strength=0.16,
+        motion_sensitivity=0.10,
+        jitter_scale=0.16,
+    ),
 
     "Detail": frame_preset(
         detail_boost=1.44,
@@ -134,6 +150,7 @@ MOTION_SUPPRESSION = {
 
 
 PRESET_MODEL_WEIGHT = {
+    "Performance": 0.95,
     "Balanced": 1.00,
     "Detail": 1.38,
     "Smooth": 0.90,
@@ -189,6 +206,11 @@ TEXTURE_PRESETS = {
         highlight_suppression=0.60,
         line_suppression=0.60,
         edge_threshold=0.060,
+    ),
+    "Performance": texture_preset(
+        enabled=False,
+        strength=0.40,
+        limit=0.015,
     ),
     "Balanced": texture_preset(
         strength=0.60,
