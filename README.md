@@ -24,10 +24,12 @@ Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines
 ---
 
 ### Models
-**DLAANet.safetensors** is the main 1x DLAA refinement model for reducing aliasing artifacts while preserving edge sharpness.
-**DLAATexture.safetensors** is a 1x detail refinement model for restoring fine texture and micro-detail after the DLAA pass.
+The pack includes two 1x refinement models:
 
-**Note:** Both models keep the original image resolution and are not ESRGAN models.
+- **DLAANet.safetensors** — main anti-aliasing refinement model for cleaner edges.
+- **DLAATexture.safetensors** — optional texture refinement model for fine detail and micro-texture.
+
+Both models keep the original image resolution and are not ESRGAN models.
 
 ---
 
