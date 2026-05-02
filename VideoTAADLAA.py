@@ -464,7 +464,7 @@ class VideoTAADLAA:
 
         step = tile_size - overlap * 2
 
-        # avoid stuck tiling
+
         if step <= 0:
             raise ValueError(
                 f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
@@ -1677,7 +1677,7 @@ class VideoTAADLAA:
         highlight_mask,
     ):
         
-        # local detail pass
+
         local_avg_rgb = F.avg_pool2d(dlaa_out, 3, stride=1, padding=1)
         fine_detail_rgb = dlaa_out - local_avg_rgb
         
@@ -1803,7 +1803,7 @@ class VideoTAADLAA:
                 motion_threshold=motion_threshold,
             )
 
-        # final temporal blend
+
         dlaa_out = self._temporal_refine(
             dlaa_out,
             prev_dlaa_output,
