@@ -57,8 +57,7 @@ log = logging.getLogger("VideoTAADLAA")
 MIN_EFFECT_STRENGTH = 1e-5
 
 
-# Internal visual tuning constants.
-# Tuned by visual tests and kept out of the UI to avoid exposing too many controls.
+# Internal tuning values from visual tests.
 FINE_LINE_DARK_SLOPE = 12.0
 
 SPECULAR_CLIP_LUMA = 0.92
@@ -1204,12 +1203,12 @@ class VideoTAADLAA:
             stride=1,
             padding=blur_kernel // 2,
         )
-        hallucinated_texture = gen_out - gen_blur
+        texture_delta = gen_out - gen_blur
         
         debug_stats = log.isEnabledFor(logging.DEBUG)
         raw_gen_delta = 0.0
         if debug_stats:
-            raw_gen_delta = hallucinated_texture.abs().mean().item()
+            raw_gen_delta = texture_delta.abs().mean().item()
             
         dark_base = texture_cfg["dark_base"]
         texture_strength = texture_cfg["strength"] * texture_intensity
@@ -1228,13 +1227,13 @@ class VideoTAADLAA:
             1.0 - thin_edge_mask * line_suppression
         )
         
-        hallucinated_texture = hallucinated_texture * texture_mask
-        hallucinated_texture = hallucinated_texture.clamp(
+        texture_delta = texture_delta * texture_mask
+        texture_delta = texture_delta.clamp(
             -texture_limit,
             texture_limit
         )
         
-        out = dlaa_out + hallucinated_texture * texture_strength
+        out = dlaa_out + texture_delta * texture_strength
         
         final_texture_delta = 0.0
         
@@ -1434,17 +1433,17 @@ class VideoTAADLAA:
         return rgb, motion_gate
 
     def _run_dlaa_with_retry(self, net, rgb, tile_size, debug_stats, frame_index):
-        current_tile_size = tile_size
+        tile = tile_size
         min_tile_size = 128
         dlaa_out = None
         last_oom_error = None
         
-        while current_tile_size >= min_tile_size:
+        while tile >= min_tile_size:
             try:
                 dlaa_out = self._tiled_forward(
                     net,
                     rgb,
-                    tile_size=current_tile_size,
+                    tile_size=tile,
                     overlap=32,
                 )
                 
@@ -1460,27 +1459,27 @@ class VideoTAADLAA:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                     
-                next_tile_size = current_tile_size // 2
+                next_tile_size = tile // 2
                 
                 if next_tile_size < min_tile_size:
                     log.error(
                         "DLAA tiled inference failed at minimum tile size %d.",
-                        current_tile_size,
+                        tile,
                     )
                     raise last_oom_error
                     
                 log.warning(
                     "Out of VRAM at tile size %d, retrying with %d.",
-                    current_tile_size,
+                    tile,
                     next_tile_size,
                 )
                 
-                current_tile_size = next_tile_size
+                tile = next_tile_size
                 
         if dlaa_out is None:
             raise RuntimeError("DLAA tiled inference failed.")
             
-        return dlaa_out, current_tile_size
+        return dlaa_out, tile
 
     def _apply_model_residual(
         self,
@@ -1591,14 +1590,14 @@ class VideoTAADLAA:
         local_detail = F.avg_pool2d(fine_detail.abs(), 7, stride=1, padding=3)
         global_detail = fine_detail.abs().mean(dim=(1, 2, 3), keepdim=True)
         
-        edge_for_detail = torch.sqrt(
+        edge = torch.sqrt(
             F.conv2d(luma, net.sobel_x, padding=1) ** 2 +
             F.conv2d(luma, net.sobel_y, padding=1) ** 2 +
             1e-6
         )
         
         edge_detail_weight = torch.sigmoid(
-            (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
+            (edge - self.edge_sharp_threshold) * self.edge_sharp_slope
         )
         
         detail_gain = (global_detail / (local_detail + 1e-6)).clamp(
@@ -1614,7 +1613,7 @@ class VideoTAADLAA:
         dlaa_out = dlaa_out + micro_detail
         
         edge_mask = torch.sigmoid(
-            (edge_for_detail - self.edge_sharp_threshold) * self.edge_sharp_slope
+            (edge - self.edge_sharp_threshold) * self.edge_sharp_slope
         )
         edge_detail = fine_detail_rgb * edge_mask * (1.0 - highlight_mask)
         
@@ -1733,7 +1732,7 @@ class VideoTAADLAA:
         if dlaa_strength <= 0:
             return rgb, prev_dlaa_output, None
 
-        dlaa_out, current_tile_size = self._run_dlaa_with_retry(
+        dlaa_out, tile = self._run_dlaa_with_retry(
             net,
             rgb,
             tile_size,
@@ -1785,7 +1784,7 @@ class VideoTAADLAA:
         dlaa_out = self._apply_texture_pass(
             texture_net=texture_net,
             dlaa_out=dlaa_out,
-            tile_size=current_tile_size,
+            tile_size=tile,
             motion_gate=motion_gate,
             dark_mask=texture_dark_mask,
             highlight_mask=highlight_mask,
