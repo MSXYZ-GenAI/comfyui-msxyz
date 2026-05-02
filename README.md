@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
 </p>
 
-High-quality anti-aliasing nodes for video and image processing in ComfyUI workflows. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharper, more stable results, while VideoAdaptiveAA focuses on aliasing-prone regions. It uses temporal accumulation, jittered sampling, and CNN-based refinement to improve edge quality.
+Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines TAA with a DLAA-inspired pipeline for sharper, more stable results, while VideoAdaptiveAA focuses on aliasing-prone regions. It uses temporal accumulation, jittered sampling, and CNN-based refinement to improve edge quality.
 
 ---
 
