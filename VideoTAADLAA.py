@@ -124,7 +124,15 @@ class VideoTAADLAA:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "preset": (["Auto", "Performance", "Balanced", "High Detail"],),
+                "preset": ([
+                    "Auto",
+                    "Performance",
+                    "Balanced",
+                    "High Detail",
+                    "Detail",
+                    "Smooth",
+                    "Photo",
+                ],),
                 "dlaa_intensity": ("FLOAT", {
                     "default": 1.00,
                     "min": 0.00,
@@ -1261,14 +1269,14 @@ class VideoTAADLAA:
         texture_intensity,
         motion_stability,
     ):
-        # Old preset names from earlier workflows
-        old_presets = {
+        # Preset aliases and old workflow names
+        preset_aliases = {
+            "High Detail": "Detail",
             "Sharp": "Detail",
             "Cinematic": "Smooth",
-            "High Detail": "Detail",
         }
 
-        preset = old_presets.get(preset, preset)
+        preset = preset_aliases.get(preset, preset)
 
         dlaa_intensity = max(0.0, min(float(dlaa_intensity), 2.0))
         texture_intensity = max(0.0, min(float(texture_intensity), 2.0))
