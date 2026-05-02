@@ -229,7 +229,7 @@ class VideoTAADLAA:
         self.detail_fur_detail_threshold = defaults["detail_fur_detail_threshold"]
         self.detail_fur_blend_limit = defaults["detail_fur_blend_limit"]
         self.detail_fur_motion_protect = defaults["detail_fur_motion_protect"]
-
+        
     def _first_time(self, key):
         if key in self._seen_warnings:
             return False
