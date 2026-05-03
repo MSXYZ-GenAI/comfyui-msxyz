@@ -225,7 +225,7 @@ TEXTURE_PRESETS = {
         edge_threshold=0.070,
     ),
     "Photo": texture_preset(
-        strength=0.36,
+        strength=0.40,
         limit=0.013,
         dark_base=0.24,
         highlight_suppression=0.65,
