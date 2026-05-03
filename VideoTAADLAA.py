@@ -1775,16 +1775,25 @@ class VideoTAADLAA:
             motion_stability,
         )
         
-        dlaa_out, texture_dark_mask = self._apply_detail_pass(
-            dlaa_out,
-            net,
-            preset,
-            detail_boost,
-            edge_boost,
-            micro_limit,
-            edge_sharp_strength,
-            highlight_mask,
-        )
+        if preset == "Photo":
+            luma = rgb_luma(dlaa_out)
+
+            texture_dark_mask = torch.clamp(
+                (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
+                0.0,
+                1.0,
+            )
+        else:
+            dlaa_out, texture_dark_mask = self._apply_detail_pass(
+                dlaa_out,
+                net,
+                preset,
+                detail_boost,
+                edge_boost,
+                micro_limit,
+                edge_sharp_strength,
+                highlight_mask,
+            )
         
         if is_detail or is_performance:
             dlaa_out = self._fine_line_aa(
