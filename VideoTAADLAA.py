@@ -1777,7 +1777,7 @@ class VideoTAADLAA:
         
         if preset == "Photo":
             luma = rgb_luma(dlaa_out)
-
+            
             texture_dark_mask = torch.clamp(
                 (luma - self.detail_dark_luma_start) / self.detail_dark_luma_range,
                 0.0,
@@ -1794,7 +1794,7 @@ class VideoTAADLAA:
                 edge_sharp_strength,
                 highlight_mask,
             )
-        
+            
         if is_detail or is_performance:
             dlaa_out = self._fine_line_aa(
                 dlaa_out,
