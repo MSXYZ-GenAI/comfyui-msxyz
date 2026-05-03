@@ -81,8 +81,6 @@ Both models keep the original image resolution and are not ESRGAN models.
 ---
 
 ## 🚀 How to use
-Add the node to your workflow and choose a preset.
-
 Recommended starting point:
 
 - Use **Auto** for general footage.
