@@ -90,8 +90,6 @@ Recommended starting point:
 - Use **Balanced** for stable video cleanup with a good quality/speed balance.
 - Use **High Detail** for hair, fur, wires, fine lines, and high-detail edges.
 
----
-
 The node uses a simple game-style preset system:
 
 | Preset | Description |
@@ -107,8 +105,8 @@ Start with **Auto**, then adjust based on your content.
 
 ## Installation
 1. Install via **ComfyUI Manager** (Search for "Anti-Aliasing Pack") or clone this repo into your `custom_nodes` folder.
-2. **Note:** The required model files are included with this custom node. 
-3. No additional Python dependencies (requirements) are required.
+2. The required model files are included with this custom node.
+3. No additional Python dependencies are required.
 
 ---
 
