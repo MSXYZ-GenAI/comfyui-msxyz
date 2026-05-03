@@ -89,8 +89,8 @@ PRESETS = {
         temporal_strength=0.08,
         micro_limit=0.022,
         luma_boost_mult=0.98,
-        saturation_boost_mult=0.98,
-        taa_strength=0.06,
+        saturation_boost_mult=0.92,
+        taa_strength=0.25,
         dlaa_strength=0.90,
         tone_strength=0.07,
         edge_sharp_strength=0.028,
@@ -154,7 +154,7 @@ PRESET_MODEL_WEIGHT = {
     "Balanced": 1.00,
     "Detail": 1.38,
     "Smooth": 0.90,
-    "Photo": 0.85,
+    "Photo": 0.95,
     "Auto": 1.10,
 }
 
@@ -213,7 +213,7 @@ TEXTURE_PRESETS = {
         limit=0.015,
     ),
     "Balanced": texture_preset(
-        strength=0.60,
+        strength=0.65,
         limit=0.020,
     ),
     "Smooth": texture_preset(
@@ -225,11 +225,11 @@ TEXTURE_PRESETS = {
         edge_threshold=0.070,
     ),
     "Photo": texture_preset(
-        strength=0.40,
+        strength=0.65,
         limit=0.013,
         dark_base=0.24,
-        highlight_suppression=0.65,
-        line_suppression=0.80,
+        highlight_suppression=0.60,
+        line_suppression=0.60,
         edge_threshold=0.070,
         edge_slope=12.0,
     ),
