@@ -107,7 +107,7 @@ Start with **Auto**, then adjust based on your content.
 
 ## Installation
 1. Install via **ComfyUI Manager** (Search for "Anti-Aliasing Pack") or clone this repo into your `custom_nodes` folder.
-2. **Note:** The required models will be automatically downloaded when you first run the node. 
+2. **Note:** The required model files are included with this custom node. 
 3. No additional Python dependencies (requirements) are required.
 
 ---
