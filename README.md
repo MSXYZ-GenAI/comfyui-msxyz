@@ -99,7 +99,7 @@ The node uses a simple game-style preset system:
 
 Start with **Auto**, then adjust based on your content.
 
-For heavy video workflows like LTX or Wan, it is usually faster to run VideoTAADLAA separately as a final post-processing pass.
+For LTX or Wan workflows, run this node separately as the final post-process.
 
 ---
 
