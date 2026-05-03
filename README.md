@@ -48,12 +48,12 @@ Both models keep the original image resolution and are not ESRGAN models.
 </p>
 <table align="center">
   <tr>
-    <td align="center"><strong></strong></td>
-    <td align="center"><strong></strong></td>
+	<td align="center"><strong></strong></td>
+	<td align="center"><strong></strong></td>
   </tr>
   <tr>
-    <td width="33%"><img src="assets/compare_1.png" width="100%"></td>
-    <td width="33%"><img src="assets/compare_2.png" width="100%"></td>
+	<td width="33%"><img src="assets/compare_1.png" width="100%"></td>
+	<td width="33%"><img src="assets/compare_2.png" width="100%"></td>
   </tr>
 </table>
 
@@ -64,8 +64,8 @@ Both models keep the original image resolution and are not ESRGAN models.
 </p>
 <table align="center">
   <tr>
-    <td align="center"><strong></strong></td>
-    <td align="center"><strong></strong></td>
+	<td align="center"><strong></strong></td>
+	<td align="center"><strong></strong></td>
 	<td align="center"><strong></strong></td>
   </tr>
   <tr>
@@ -98,6 +98,8 @@ The node uses a simple game-style preset system:
 | **High Detail** | Best quality for fine detail, edge cleanup, and temporal refinement. Slower. |
 
 Start with **Auto**, then adjust based on your content.
+
+For heavy video workflows like LTX or Wan, it is usually faster to run VideoTAADLAA separately as a final post-processing pass.
 
 ---
 
