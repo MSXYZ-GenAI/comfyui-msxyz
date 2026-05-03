@@ -101,7 +101,9 @@ class VideoTAADLAA:
 
         self.texture_net_cache = {}
         self._texture_lock = threading.Lock()
+
         self._seen_warnings = set()
+        self._warning_lock = threading.Lock()
 
         self._load_defaults()
 
@@ -113,11 +115,12 @@ class VideoTAADLAA:
             setattr(self, name, NODE_DEFAULTS[name])
 
     def _first_time(self, key):
-        if key in self._seen_warnings:
-            return False
+        with self._warning_lock:
+            if key in self._seen_warnings:
+                return False
 
-        self._seen_warnings.add(key)
-        return True
+            self._seen_warnings.add(key)
+            return True
 
     @classmethod
     def INPUT_TYPES(cls):
