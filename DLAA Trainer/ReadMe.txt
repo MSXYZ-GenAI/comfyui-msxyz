@@ -2,6 +2,9 @@ DLAA Model Training Guide
 
 You can use these tools to train new DLAA models from scratch.
 
+Recommended hardware:
+NVIDIA RTX 3090 or better with 24 GB VRAM.
+
 1. Prepare the dataset
 
 Place your training images in the dataset folder.
