@@ -8,9 +8,9 @@ import torch
 LUMA_WEIGHTS = (0.2126, 0.7152, 0.0722)
 
 
-def rgb_luma(x: torch.Tensor) -> torch.Tensor:
+def rgb_luma(image: torch.Tensor) -> torch.Tensor:
     r, g, b = LUMA_WEIGHTS
-    return r * x[:, 0:1] + g * x[:, 1:2] + b * x[:, 2:3]
+    return r * image[:, 0:1] + g * image[:, 1:2] + b * image[:, 2:3]
 
 
 def clamp01(value) -> float:

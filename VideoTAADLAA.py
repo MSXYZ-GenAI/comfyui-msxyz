@@ -328,7 +328,7 @@ class VideoTAADLAA:
             w_x.view(1, 1, 1, tw)
         )
 
-    def _tiled_forward(self, net, x: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
+    def _tiled_forward(self, net, image: torch.Tensor, tile_size: int = 512, overlap: int = 32) -> torch.Tensor:
 
         tile_size = int(tile_size)
         overlap = int(overlap)
@@ -345,10 +345,10 @@ class VideoTAADLAA:
             )
 
         # Tile-based inference with border blending.
-        B, C, H, W = x.shape
+        B, C, H, W = image.shape
 
         if H <= tile_size and W <= tile_size:
-            return torch.clamp(net(x), 0.0, 1.0)
+            return torch.clamp(net(image), 0.0, 1.0)
 
 
         step = tile_size - overlap * 2
@@ -359,8 +359,8 @@ class VideoTAADLAA:
                 f"Invalid tiling settings: tile_size={tile_size}, overlap={overlap}"
             )
             
-        out = torch.zeros_like(x)
-        weight = torch.zeros(B, 1, H, W, device=x.device, dtype=x.dtype)
+        out = torch.zeros_like(image)
+        weight = torch.zeros(B, 1, H, W, device=image.device, dtype=image.dtype)
         weight_cache = {}
         
         y0 = 0
@@ -373,21 +373,21 @@ class VideoTAADLAA:
                 x1    = min(x0 + tile_size, W)
                 x0_c  = max(0, x1 - tile_size)
 
-                tile = x[:, :, y0_c:y1, x0_c:x1]
+                tile = image[:, :, y0_c:y1, x0_c:x1]
                 dlaa_out_tile = net(tile)
 
                 tile_h = tile.shape[2]
                 tile_w = tile.shape[3]
 
-                cache_key = (tile_h, tile_w, overlap, x.device, x.dtype)
+                cache_key = (tile_h, tile_w, overlap, image.device, image.dtype)
 
                 if cache_key not in weight_cache:
                     weight_cache[cache_key] = self._tile_weight_map(
                         tile_h,
                         tile_w,
                         overlap,
-                        x.device,
-                        x.dtype,
+                        image.device,
+                        image.dtype,
                     )
 
                 w_map = weight_cache[cache_key]
@@ -413,73 +413,73 @@ class VideoTAADLAA:
 
         return offsets.shape[0]
 
-    def _jitter(self, x, idx, scale, net):
+    def _jitter(self, image, idx, scale, net):
         if scale < 1e-5:
-            return x
+            return image
 
         offsets = getattr(net, "jitter_offsets", None)
 
         if offsets is None or offsets.shape[0] == 0:
-            return x
+            return image
 
-        off = offsets[idx % offsets.shape[0]].to(device=x.device, dtype=x.dtype)
+        off = offsets[idx % offsets.shape[0]].to(device=image.device, dtype=image.dtype)
 
-        B, C, H, W = x.shape
+        B, C, H, W = image.shape
 
         theta = torch.eye(
             2,
             3,
-            device=x.device,
-            dtype=x.dtype,
+            device=image.device,
+            dtype=image.dtype,
         ).unsqueeze(0).repeat(B, 1, 1)
 
         theta[:, 0, 2] = off[0] * scale / W
         theta[:, 1, 2] = off[1] * scale / H
 
-        grid = F.affine_grid(theta, x.shape, align_corners=False)
+        grid = F.affine_grid(theta, image.shape, align_corners=False)
 
         return F.grid_sample(
-            x,
+            image,
             grid,
             mode="bilinear",
             padding_mode="reflection",
             align_corners=False,
         )
 
-    def _luma_edge(self, x, net):
-        luma = rgb_luma(x)
+    def _luma_edge(self, image, net):
+        luma = rgb_luma(image)
         sx = F.conv2d(luma, net.sobel_x, padding=1)
         sy = F.conv2d(luma, net.sobel_y, padding=1)
         edge = torch.sqrt(sx * sx + sy * sy + 1e-6)
 
         return luma, edge
 
-    def _edge_aa(self, x, thr, blur_radius, net, strength=1.0):
+    def _edge_aa(self, image, thr, blur_radius, net, strength=1.0):
         strength = clamp01(strength)
 
         if blur_radius <= 0 or strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        _, edge = self._luma_edge(x, net)
+        _, edge = self._luma_edge(image, net)
 
         mask = torch.sigmoid((edge - thr) * self.edge_aa_slope)
         mask = mask * strength
 
         blurred = F.avg_pool2d(
-            F.pad(x, [blur_radius] * 4, mode="reflect"),
+            F.pad(image, [blur_radius] * 4, mode="reflect"),
             blur_radius * 2 + 1,
             stride=1,
         )
 
-        return x * (1.0 - mask) + blurred * mask
+        return image * (1.0 - mask) + blurred * mask
 
-    def _fine_line_aa(self, x, net, strength):
+    def _fine_line_aa(self, image, net, strength):
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        luma, edge = self._luma_edge(x, net)
+        luma, edge = self._luma_edge(image, net)
 
         dark_mask = torch.sigmoid(
             (self.detail_fine_line_dark_threshold - luma) * FINE_LINE_DARK_SLOPE
@@ -489,8 +489,8 @@ class VideoTAADLAA:
             (edge - self.detail_fine_line_edge_threshold) * self.edge_aa_slope
         )
 
-        local_avg = F.avg_pool2d(x, 3, stride=1, padding=1)
-        fine_detail = rgb_luma((x - local_avg).abs())
+        local_avg = F.avg_pool2d(image, 3, stride=1, padding=1)
+        fine_detail = rgb_luma((image - local_avg).abs())
 
         detail_mask = torch.sigmoid(
             (fine_detail - self.detail_shimmer_threshold) *
@@ -500,7 +500,7 @@ class VideoTAADLAA:
         line_mask = (dark_mask * edge_mask * detail_mask).clamp(0.0, 1.0)
 
         blurred = F.avg_pool2d(
-            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            F.pad(image, [1, 1, 1, 1], mode="reflect"),
             3,
             stride=1,
         )
@@ -508,30 +508,30 @@ class VideoTAADLAA:
         blur_strength = clamp01(self.detail_fine_line_blur_strength)
 
         aa_target = torch.lerp(
-            x,
+            image,
             blurred,
             blur_strength,
         )
 
         blend = (line_mask * strength).clamp(0.0, 1.0)
 
-        return torch.lerp(x, aa_target, blend).clamp(0.0, 1.0)
+        return torch.lerp(image, aa_target, blend).clamp(0.0, 1.0)
 
-    def _specular_detail(self, x, net, highlight_mask, strength):
+    def _specular_detail(self, image, net, highlight_mask, strength):
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        luma, edge = self._luma_edge(x, net)
+        luma, edge = self._luma_edge(image, net)
 
         local_avg = F.avg_pool2d(
-            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            F.pad(image, [1, 1, 1, 1], mode="reflect"),
             3,
             stride=1,
         )
 
-        spec_residual = (x - local_avg).clamp(min=0.0)
+        spec_residual = (image - local_avg).clamp(min=0.0)
         spec_residual = spec_residual.clamp(max=self.detail_specular_limit)
 
         bright_mask = torch.sigmoid(
@@ -557,13 +557,13 @@ class VideoTAADLAA:
         if highlight_mask is not None:
             spec_mask = spec_mask * (1.0 - highlight_mask * SPECULAR_HIGHLIGHT_SUPPRESSION)
 
-        return (x + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
+        return (image + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
 
-    def _micro_contrast(self, x, highlight_mask, strength):
+    def _micro_contrast(self, image, highlight_mask, strength):
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
         radius = int(self.detail_micro_contrast_radius)
         radius = max(3, radius)
@@ -574,18 +574,18 @@ class VideoTAADLAA:
         pad = radius // 2
 
         local_avg = F.avg_pool2d(
-            F.pad(x, [pad, pad, pad, pad], mode="reflect"),
+            F.pad(image, [pad, pad, pad, pad], mode="reflect"),
             radius,
             stride=1,
         )
 
-        residual = x - local_avg
+        residual = image - local_avg
         residual = residual.clamp(
             -self.detail_micro_contrast_limit,
             self.detail_micro_contrast_limit,
         )
 
-        luma = rgb_luma(x)
+        luma = rgb_luma(image)
         detail_energy = rgb_luma(residual.abs())
 
         detail_mask = torch.sigmoid(
@@ -603,34 +603,34 @@ class VideoTAADLAA:
                 self.detail_micro_contrast_highlight_protect
             )
 
-        out = x + residual * detail_mask * protect * strength
+        out = image + residual * detail_mask * protect * strength
 
         return torch.clamp(out, 0.0, 1.0)
 
     def _edge_dehalo(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         net,
         strength: float,
     ) -> torch.Tensor:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        luma, edge = self._luma_edge(x, net)
+        luma, edge = self._luma_edge(image, net)
 
         edge_mask = torch.sigmoid(
             (edge - self.detail_dehalo_threshold) * self.edge_sharp_slope
         )
 
         local_avg = F.avg_pool2d(
-            F.pad(x, [2, 2, 2, 2], mode="reflect"),
+            F.pad(image, [2, 2, 2, 2], mode="reflect"),
             5,
             stride=1,
         )
 
-        halo_residual = x - local_avg
+        halo_residual = image - local_avg
 
         bright_halo = halo_residual.clamp(min=0.0)
         dark_halo = (-halo_residual).clamp(min=0.0)
@@ -650,28 +650,28 @@ class VideoTAADLAA:
             1.0 - dark_protect * self.detail_dehalo_dark_protect
         )
 
-        out = x - bright_reduce + dark_reduce
+        out = image - bright_reduce + dark_reduce
 
         return torch.clamp(out, 0.0, 1.0)
 
     def _chroma_edge_cleanup(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         net,
         strength: float,
     ) -> torch.Tensor:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        luma, edge = self._luma_edge(x, net)
+        luma, edge = self._luma_edge(image, net)
 
         edge_mask = torch.sigmoid(
             (edge - self.detail_chroma_edge_threshold) * self.edge_aa_slope
         )
 
-        chroma = x - luma
+        chroma = image - luma
 
         chroma_blur = F.avg_pool2d(
             F.pad(chroma, [1, 1, 1, 1], mode="reflect"),
@@ -718,7 +718,7 @@ class VideoTAADLAA:
 
     def _subpixel_edge_reconstruction(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         net,
         motion_gate: float,
         strength: float,
@@ -726,9 +726,9 @@ class VideoTAADLAA:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
             
-        luma = rgb_luma(x)
+        luma = rgb_luma(image)
 
         sx = F.conv2d(luma, net.sobel_x, padding=1)
         sy = F.conv2d(luma, net.sobel_y, padding=1)
@@ -739,7 +739,7 @@ class VideoTAADLAA:
             self.detail_subpixel_edge_slope
         )
 
-        B, C, H, W = x.shape
+        B, C, H, W = image.shape
         
         # Use the Sobel direction as a local edge normal.
         # Sampling both sides of the edge gives a small reconstruction target without inventing new detail.
@@ -752,8 +752,8 @@ class VideoTAADLAA:
         offset_y = ny.squeeze(1) * sample_scale * (2.0 / max(H - 1, 1))
 
         yy, xx = torch.meshgrid(
-            torch.linspace(-1.0, 1.0, H, device=x.device, dtype=x.dtype),
-            torch.linspace(-1.0, 1.0, W, device=x.device, dtype=x.dtype),
+            torch.linspace(-1.0, 1.0, H, device=image.device, dtype=image.dtype),
+            torch.linspace(-1.0, 1.0, W, device=image.device, dtype=image.dtype),
             indexing="ij",
         )
 
@@ -765,7 +765,7 @@ class VideoTAADLAA:
         grid_neg = base_grid - offset
 
         sample_pos = F.grid_sample(
-            x,
+            image,
             grid_pos,
             mode="bilinear",
             padding_mode="reflection",
@@ -773,7 +773,7 @@ class VideoTAADLAA:
         )
 
         sample_neg = F.grid_sample(
-            x,
+            image,
             grid_neg,
             mode="bilinear",
             padding_mode="reflection",
@@ -783,7 +783,7 @@ class VideoTAADLAA:
         # Average the two offset samples and limit the delta so thin edges improve gently.
         reconstructed = (sample_pos + sample_neg) * 0.5
 
-        delta = reconstructed - x
+        delta = reconstructed - image
         delta = delta.clamp(
             -self.detail_subpixel_delta_limit,
             self.detail_subpixel_delta_limit,
@@ -799,13 +799,13 @@ class VideoTAADLAA:
             self.detail_subpixel_blend_limit,
         )
 
-        out = x + delta * blend
+        out = image + delta * blend
 
         return torch.clamp(out, 0.0, 1.0)
 
     def _temporal_specular_stabilizer(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         previous: torch.Tensor,
         motion_gate: float,
         strength: float,
@@ -813,16 +813,16 @@ class VideoTAADLAA:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        if previous is None or previous.shape != x.shape:
-            return x
+        if previous is None or previous.shape != image.shape:
+            return image
 
-        luma = rgb_luma(x)
+        luma = rgb_luma(image)
         prev_luma = rgb_luma(previous)
 
         local_avg = F.avg_pool2d(
-            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            F.pad(image, [1, 1, 1, 1], mode="reflect"),
             3,
             stride=1,
         )
@@ -832,10 +832,10 @@ class VideoTAADLAA:
             3,
             stride=1,
         )
-        
+
         # Specular detail is treated as positive high-frequency residual.
         # Blend only the bright residual to reduce sparkle without smearing the frame.
-        current_spec = (x - local_avg).clamp(min=0.0)
+        current_spec = (image - local_avg).clamp(min=0.0)
         previous_spec = (previous - prev_local_avg).clamp(min=0.0)
 
         spec_energy = rgb_luma(current_spec)
@@ -849,7 +849,7 @@ class VideoTAADLAA:
             (spec_energy - self.detail_specular_temporal_detail_threshold) *
             TEMPORAL_SPEC_DETAIL_SLOPE
         )
-        
+
         # Stabilize only pixels that are locally stable between frames.
         # Moving highlights should stay responsive instead of being pulled from history.
         local_motion = torch.abs(luma - prev_luma)
@@ -884,13 +884,13 @@ class VideoTAADLAA:
             self.detail_specular_temporal_delta_limit,
         )
 
-        out = x + delta
+        out = image + delta
 
         return torch.clamp(out, 0.0, 1.0)
 
     def _local_tone_mapping(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         highlight_mask: torch.Tensor,
         motion_gate: float,
         strength: float,
@@ -898,7 +898,7 @@ class VideoTAADLAA:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
         radius = int(self.detail_local_tonemap_radius)
         radius = max(3, radius)
@@ -908,7 +908,7 @@ class VideoTAADLAA:
 
         pad = radius // 2
 
-        luma = rgb_luma(x)
+        luma = rgb_luma(image)
 
         local_avg = F.avg_pool2d(
             F.pad(luma, [pad, pad, pad, pad], mode="reflect"),
@@ -959,19 +959,19 @@ class VideoTAADLAA:
             -self.detail_local_tonemap_limit,
             self.detail_local_tonemap_limit,
         )
-        
+
         # Apply tone changes as a luma ratio so RGB color balance is mostly preserved.
         target_luma = (luma + luma_delta).clamp(0.0, 1.0)
 
         ratio = target_luma / luma.clamp(min=1e-6)
         ratio = ratio.clamp(LOCAL_TONEMAP_RATIO_MIN, LOCAL_TONEMAP_RATIO_MAX)
-        out = x * ratio
+        out = image * ratio
 
         return torch.clamp(out, 0.0, 1.0)
 
     def _fur_hair_stabilizer(
         self,
-        x: torch.Tensor,
+        image: torch.Tensor,
         previous: torch.Tensor,
         net,
         motion_gate: float,
@@ -980,15 +980,15 @@ class VideoTAADLAA:
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
-            return x
+            return image
 
-        if previous is None or previous.shape != x.shape:
-            return x
+        if previous is None or previous.shape != image.shape:
+            return image
 
-        _, edge = self._luma_edge(x, net)
+        _, edge = self._luma_edge(image, net)
 
         local_avg = F.avg_pool2d(
-            F.pad(x, [1, 1, 1, 1], mode="reflect"),
+            F.pad(image, [1, 1, 1, 1], mode="reflect"),
             3,
             stride=1,
         )
@@ -998,9 +998,9 @@ class VideoTAADLAA:
             stride=1,
         )
 
-        fine_detail = rgb_luma((x - local_avg).abs())
+        fine_detail = rgb_luma((image - local_avg).abs())
         prev_detail = previous - prev_local_avg
-        current_detail = x - local_avg
+        current_detail = image - local_avg
 
         edge_mask = torch.sigmoid(
             (edge - self.detail_fur_edge_threshold) * self.edge_aa_slope

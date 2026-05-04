@@ -110,8 +110,8 @@ class DLAANet(nn.Module):
 
         nn.init.zeros_(self.reconstructor.weight)
 
-    def forward(self, x):
-        input_img = x
+    def forward(self, image):
+        input_img = image
 
         feat_low = self.enc1(input_img)
         feat_high = self.enc2(feat_low)

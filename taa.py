@@ -34,8 +34,8 @@ class TAAState:
         self.frame_id = 0
 
     @staticmethod
-    def _smoothstep(x: torch.Tensor) -> torch.Tensor:
-        return x * x * (3.0 - 2.0 * x)
+    def _smoothstep(value: torch.Tensor) -> torch.Tensor:
+        return value * value * (3.0 - 2.0 * value)
 
     def update(self, frame, alpha, sensitivity):
         if self.history is None or self.history.shape != frame.shape:
