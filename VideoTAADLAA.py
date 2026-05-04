@@ -1352,6 +1352,10 @@ class VideoTAADLAA:
             return 0
 
     def _tile_size_for_vram(self, vram_mb):
+        # For CPU or unknown VRAM, use the safe tile size.
+        if vram_mb <= 0:
+            return 512
+
         if vram_mb <= 8192:
             return 512
 
