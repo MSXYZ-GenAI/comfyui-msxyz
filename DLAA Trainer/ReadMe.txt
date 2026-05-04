@@ -1,14 +1,45 @@
-You can use this tutorial to train a new DLAA model from scratch.
+DLAA Model Training Guide
 
-First, load your images into the dataset folder. (5,000-10,000 HD images)
-Run Clean_Dataset.bat to filter the images. This will move low-quality images to the 'reject' folder.
+You can use these tools to train new DLAA models from scratch.
 
-Run a smoke test first. If everything goes well, proceed with the actual training by running Trainer_DLAA.bat or Trainer_Texture.bat.
+1. Prepare the dataset
 
-DLAANet.safetensors — main anti-aliasing refinement model for cleaner edges.
-DLAATexture.safetensors — optional texture refinement model for fine detail and micro-texture.
+Place your training images in the dataset folder.
 
-The both model files will appear in the 'runs' folder. 
-If the process stops midway, you can resume it. The best checkpoints are saved automatically. 
+Recommended dataset size:
+5,000 - 10,000 HD images
 
-The final output files will be DLAANet.safetensor and DLAATexture.safetensors.
+Run Clean_Dataset.bat to filter the images.
+
+The cleaner checks for weak, broken, low-detail, document-like, or duplicate images.
+Rejected images are moved to the _rejected folder instead of being deleted.
+
+2. Run a smoke test
+
+Run the smoke test first before starting a full training run.
+
+If everything works correctly, continue with the actual training.
+
+3. Train the models
+
+Run Trainer_DLAA.bat to train the main DLAA model.
+
+Run Trainer_Texture.bat to train the optional texture refinement model.
+
+4. Output files
+
+DLAANet.safetensors:
+Main anti-aliasing refinement model for cleaner edges.
+
+DLAATexture.safetensors:
+Optional texture refinement model for fine detail and micro-texture.
+
+Both model files will be saved in the runs folder.
+
+Best checkpoints are saved automatically during training.
+If training stops midway, you can resume from the latest checkpoint.
+
+Final output files:
+
+DLAANet.safetensors
+DLAATexture.safetensors
