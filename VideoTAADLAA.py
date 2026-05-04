@@ -1355,13 +1355,13 @@ class VideoTAADLAA:
         # For CPU or unknown VRAM, use the safe tile size.
         if vram_mb <= 0:
             return 512
-
+            
         if vram_mb <= 8192:
             return 512
-
+            
         if vram_mb <= 16384:
             return 1024
-
+            
         return 1536
 
     def _log_tiling(self, height, width, tile_size):
