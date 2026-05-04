@@ -1,4 +1,4 @@
-# Video TAA + DLAA
+# Video TAA + DLAA Inference
 # v0.2.0
 # MSXYZ
 # AI-assisted
