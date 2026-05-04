@@ -131,7 +131,7 @@ NODE_DEFAULTS = {
     "detail_fine_line_aa_strength": 0.45,
     "detail_fine_line_dark_threshold": 0.34,
     "detail_fine_line_edge_threshold": 0.075,
-    "detail_fine_line_blur_strength": 0.44,
+    "detail_fine_line_blur_strength": 0.40,
 
     # Specular detail
     "detail_specular_strength": 0.12,
