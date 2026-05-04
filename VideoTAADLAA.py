@@ -465,7 +465,7 @@ class VideoTAADLAA:
         return luma, edge
 
     def _edge_aa(self, image, thr, blur_radius, net, strength=1.0):
-        # Soften only the pixels that are likely to be hard aliasing edges.
+        # Soften likely aliasing edges.
         strength = clamp01(strength)
 
         if blur_radius <= 0 or strength <= MIN_EFFECT_STRENGTH:
@@ -530,7 +530,7 @@ class VideoTAADLAA:
         return torch.lerp(image, aa_target, blend).clamp(0.0, 1.0)
 
     def _specular_detail(self, image, net, highlight_mask, strength):
-        # Recover small bright details while protecting clipped highlights.
+        # Add back small bright details, but avoid clipped highlights.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -573,7 +573,7 @@ class VideoTAADLAA:
         return (image + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
 
     def _micro_contrast(self, image, highlight_mask, strength):
-        # Add controlled local contrast from small high-frequency details.
+        # Add a little local contrast from fine detail.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -675,7 +675,7 @@ class VideoTAADLAA:
         net,
         strength: float,
     ) -> torch.Tensor:
-        # Clean small color fringes around edges without changing luma.
+        # Reduce small chroma fringes near edges.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -757,8 +757,8 @@ class VideoTAADLAA:
 
         B, C, H, W = image.shape
         
-        # Use the Sobel direction as a local edge normal.
-        # Sampling both sides of the edge gives a small reconstruction target without inventing new detail.
+        # Sobel direction gives the local edge normal.
+        # Sample both sides to build a small edge reconstruction target.
         nx = sx / edge.clamp(min=1e-6)
         ny = sy / edge.clamp(min=1e-6)
 
@@ -994,7 +994,7 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
-        # Stabilize fine fur and hair detail by blending stable detail from the previous frame.
+        # Reuse stable fur/hair detail from the previous frame.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -1974,6 +1974,15 @@ class VideoTAADLAA:
         
         vram_mb = self._vram_mb(device)
         tile_size = self._tile_size_for_vram(vram_mb)
+
+        if debug_stats:
+            log.debug(
+                "[DLAA] device=%s vram=%dMB tile_size=%d",
+                device,
+                vram_mb,
+                tile_size,
+            )
+
         self._log_tiling(H, W, tile_size)
         
         progress = ProgressBar(B) if ProgressBar is not None else None
