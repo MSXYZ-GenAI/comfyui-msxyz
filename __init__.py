@@ -1,7 +1,9 @@
 __version__ = "0.2.0"
 
+
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
+
 
 try:
     from .VideoAdaptiveAA import (
@@ -24,6 +26,7 @@ try:
 
     NODE_CLASS_MAPPINGS.update(TAA_MAPPINGS)
     NODE_DISPLAY_NAME_MAPPINGS.update(TAA_NAMES)
+
 
 except Exception as e:
     print(f"[MSXYZ] VideoTAADLAA failed to load: {type(e).__name__}: {e}")
