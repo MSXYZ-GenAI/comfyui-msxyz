@@ -57,6 +57,13 @@ log = logging.getLogger("VideoTAADLAA")
 MIN_EFFECT_STRENGTH = 1e-5
 
 
+def load_torch_weights(path, device):
+    try:
+        return torch.load(path, map_location=device, weights_only=True)
+    except TypeError:
+        return torch.load(path, map_location=device)
+
+
 # Internal tuning values from visual tests.
 FINE_LINE_DARK_SLOPE = 12.0
 
@@ -178,7 +185,7 @@ class VideoTAADLAA:
                 state_dict = load_file(safetensors_path, device=str(device))
                 log.info("[DLAA] Loaded DLAANet.safetensors")
             elif os.path.exists(pth_path):
-                state_dict = torch.load(pth_path, map_location=device)
+                state_dict = load_torch_weights(pth_path, device)
                 log.info("[DLAA] Loaded DLAANet.pth")
             else:
                 raise FileNotFoundError(
@@ -250,7 +257,7 @@ class VideoTAADLAA:
                 if model_path.endswith(".safetensors"):
                     state_dict = load_file(model_path, device=str(device))
                 else:
-                    state_dict = torch.load(model_path, map_location=device)
+                    state_dict = load_torch_weights(model_path, device)
                     
                 if isinstance(state_dict, dict):
                     if "state_dict" in state_dict:
