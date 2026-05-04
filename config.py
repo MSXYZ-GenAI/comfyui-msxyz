@@ -2,7 +2,55 @@
 # MSXYZ
 
 
-# Internal tuning values for the AA pipeline.
+# Internal tuning values from visual tests.
+INTERNAL_TUNING = {
+    # Fine-line AA
+    "fine_line_dark_slope": 12.0,
+
+    # Specular detail
+    "specular_clip_luma": 0.92,
+    "specular_clip_slope": 20.0,
+    "specular_edge_threshold": 0.04,
+    "specular_edge_slope": 12.0,
+    "specular_highlight_suppression": 0.60,
+
+    # Micro contrast
+    "micro_detail_threshold": 0.006,
+    "micro_detail_slope": 80.0,
+    "micro_highlight_luma": 0.85,
+    "micro_highlight_slope": 12.0,
+
+    # Dehalo
+    "dehalo_dark_protect_luma": 0.22,
+    "dehalo_light_protect_luma": 0.78,
+    "dehalo_protect_slope": 12.0,
+
+    # Chroma cleanup
+    "chroma_saturation_slope": 20.0,
+    "chroma_fringe_threshold_scale": 0.25,
+    "chroma_fringe_slope": 80.0,
+    "chroma_dark_protect_slope": 12.0,
+
+    # Temporal specular stabilizer
+    "temporal_spec_detail_slope": 80.0,
+    "temporal_spec_motion_scale": 0.08,
+
+    # Local tone mapping
+    "local_tonemap_highlight_luma": 0.82,
+    "local_tonemap_highlight_slope": 12.0,
+    "local_tonemap_shadow_slope": 10.0,
+    "local_tonemap_ratio_min": 0.90,
+    "local_tonemap_ratio_max": 1.10,
+
+    # Jitter
+    "jitter_damping_min": 0.45,
+
+    # Fur / hair stabilizer
+    "fur_detail_slope": 80.0,
+}
+
+
+# Main node defaults.
 # Only a small set of controls is exposed in ComfyUI.
 NODE_DEFAULTS = {
     # Model blend

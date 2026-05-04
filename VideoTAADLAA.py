@@ -16,7 +16,7 @@ try:
     from .model import DLAANet
     from .utils import rgb_luma, clamp01
     from .taa import TAAState
-    from .config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS
+    from .config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS, INTERNAL_TUNING
     from .presets import (
         PRESETS,
         AUTO_STATIC,
@@ -30,7 +30,7 @@ except ImportError:
     from model import DLAANet
     from utils import rgb_luma, clamp01
     from taa import TAAState
-    from config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS
+    from config import NODE_DEFAULTS, NODE_DEFAULT_FIELDS, INTERNAL_TUNING
     from presets import (
         PRESETS,
         AUTO_STATIC,
@@ -64,41 +64,43 @@ def load_torch_weights(path, device):
         return torch.load(path, map_location=device)
 
 
-# Internal tuning values from visual tests.
-FINE_LINE_DARK_SLOPE = 12.0
+# Internal tuning values from config.py.
+TUNING = INTERNAL_TUNING
 
-SPECULAR_CLIP_LUMA = 0.92
-SPECULAR_CLIP_SLOPE = 20.0
-SPECULAR_EDGE_THRESHOLD = 0.04
-SPECULAR_EDGE_SLOPE = 12.0
-SPECULAR_HIGHLIGHT_SUPPRESSION = 0.60
+FINE_LINE_DARK_SLOPE = TUNING["fine_line_dark_slope"]
 
-MICRO_DETAIL_THRESHOLD = 0.006
-MICRO_DETAIL_SLOPE = 80.0
-MICRO_HIGHLIGHT_LUMA = 0.85
-MICRO_HIGHLIGHT_SLOPE = 12.0
+SPECULAR_CLIP_LUMA = TUNING["specular_clip_luma"]
+SPECULAR_CLIP_SLOPE = TUNING["specular_clip_slope"]
+SPECULAR_EDGE_THRESHOLD = TUNING["specular_edge_threshold"]
+SPECULAR_EDGE_SLOPE = TUNING["specular_edge_slope"]
+SPECULAR_HIGHLIGHT_SUPPRESSION = TUNING["specular_highlight_suppression"]
 
-DEHALO_DARK_PROTECT_LUMA = 0.22
-DEHALO_LIGHT_PROTECT_LUMA = 0.78
-DEHALO_PROTECT_SLOPE = 12.0
+MICRO_DETAIL_THRESHOLD = TUNING["micro_detail_threshold"]
+MICRO_DETAIL_SLOPE = TUNING["micro_detail_slope"]
+MICRO_HIGHLIGHT_LUMA = TUNING["micro_highlight_luma"]
+MICRO_HIGHLIGHT_SLOPE = TUNING["micro_highlight_slope"]
 
-CHROMA_SATURATION_SLOPE = 20.0
-CHROMA_FRINGE_THRESHOLD_SCALE = 0.25
-CHROMA_FRINGE_SLOPE = 80.0
-CHROMA_DARK_PROTECT_SLOPE = 12.0
+DEHALO_DARK_PROTECT_LUMA = TUNING["dehalo_dark_protect_luma"]
+DEHALO_LIGHT_PROTECT_LUMA = TUNING["dehalo_light_protect_luma"]
+DEHALO_PROTECT_SLOPE = TUNING["dehalo_protect_slope"]
 
-TEMPORAL_SPEC_DETAIL_SLOPE = 80.0
-TEMPORAL_SPEC_MOTION_SCALE = 0.08
+CHROMA_SATURATION_SLOPE = TUNING["chroma_saturation_slope"]
+CHROMA_FRINGE_THRESHOLD_SCALE = TUNING["chroma_fringe_threshold_scale"]
+CHROMA_FRINGE_SLOPE = TUNING["chroma_fringe_slope"]
+CHROMA_DARK_PROTECT_SLOPE = TUNING["chroma_dark_protect_slope"]
 
-LOCAL_TONEMAP_HIGHLIGHT_LUMA = 0.82
-LOCAL_TONEMAP_HIGHLIGHT_SLOPE = 12.0
-LOCAL_TONEMAP_SHADOW_SLOPE = 10.0
-LOCAL_TONEMAP_RATIO_MIN = 0.90
-LOCAL_TONEMAP_RATIO_MAX = 1.10
+TEMPORAL_SPEC_DETAIL_SLOPE = TUNING["temporal_spec_detail_slope"]
+TEMPORAL_SPEC_MOTION_SCALE = TUNING["temporal_spec_motion_scale"]
 
-JITTER_DAMPING_MIN = 0.45
+LOCAL_TONEMAP_HIGHLIGHT_LUMA = TUNING["local_tonemap_highlight_luma"]
+LOCAL_TONEMAP_HIGHLIGHT_SLOPE = TUNING["local_tonemap_highlight_slope"]
+LOCAL_TONEMAP_SHADOW_SLOPE = TUNING["local_tonemap_shadow_slope"]
+LOCAL_TONEMAP_RATIO_MIN = TUNING["local_tonemap_ratio_min"]
+LOCAL_TONEMAP_RATIO_MAX = TUNING["local_tonemap_ratio_max"]
 
-FUR_DETAIL_SLOPE = 80.0
+JITTER_DAMPING_MIN = TUNING["jitter_damping_min"]
+
+FUR_DETAIL_SLOPE = TUNING["fur_detail_slope"]
 
 
 class VideoTAADLAA:
@@ -454,6 +456,7 @@ class VideoTAADLAA:
         )
 
     def _luma_edge(self, image, net):
+        # Return luma and a Sobel edge map for the current frame.
         luma = rgb_luma(image)
         sx = F.conv2d(luma, net.sobel_x, padding=1)
         sy = F.conv2d(luma, net.sobel_y, padding=1)
@@ -462,6 +465,7 @@ class VideoTAADLAA:
         return luma, edge
 
     def _edge_aa(self, image, thr, blur_radius, net, strength=1.0):
+        # Soften only the pixels that are likely to be hard aliasing edges.
         strength = clamp01(strength)
 
         if blur_radius <= 0 or strength <= MIN_EFFECT_STRENGTH:
@@ -481,6 +485,7 @@ class VideoTAADLAA:
         return image * (1.0 - mask) + blurred * mask
 
     def _fine_line_aa(self, image, net, strength):
+        # Reduce shimmer on thin dark lines without blurring the whole frame.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -525,6 +530,7 @@ class VideoTAADLAA:
         return torch.lerp(image, aa_target, blend).clamp(0.0, 1.0)
 
     def _specular_detail(self, image, net, highlight_mask, strength):
+        # Recover small bright details while protecting clipped highlights.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -567,6 +573,7 @@ class VideoTAADLAA:
         return (image + spec_residual * spec_mask * strength).clamp(0.0, 1.0)
 
     def _micro_contrast(self, image, highlight_mask, strength):
+        # Add controlled local contrast from small high-frequency details.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -620,6 +627,7 @@ class VideoTAADLAA:
         net,
         strength: float,
     ) -> torch.Tensor:
+        # Reduce bright and dark halos around strong edges.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -667,6 +675,7 @@ class VideoTAADLAA:
         net,
         strength: float,
     ) -> torch.Tensor:
+        # Clean small color fringes around edges without changing luma.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -902,6 +911,7 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
+        # Adjust local luma contrast while keeping RGB balance stable.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -984,6 +994,7 @@ class VideoTAADLAA:
         motion_gate: float,
         strength: float,
     ) -> torch.Tensor:
+        # Stabilize fine fur and hair detail by blending stable detail from the previous frame.
         strength = clamp01(strength)
 
         if strength <= MIN_EFFECT_STRENGTH:
@@ -1038,6 +1049,7 @@ class VideoTAADLAA:
         return torch.clamp(out, 0.0, 1.0)
 
     def _temporal_refine(self, current, previous, strength=0.35, motion_threshold=0.08):
+        # Blend stable areas with the previous frame to reduce temporal shimmer.
         if previous is None:
             return current
 
@@ -1062,6 +1074,7 @@ class VideoTAADLAA:
         strength,
         motion_threshold,
     ):
+        # Reuse stable fine detail from the previous frame to reduce flicker.
         if previous is None:
             return current
 
