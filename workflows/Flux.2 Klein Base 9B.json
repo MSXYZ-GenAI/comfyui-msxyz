@@ -1885,7 +1885,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSXYZ-GenAI/comfyui-msxyz",
+              "aux_id": "MSYNTRIX/comfyui-msyntrix",
               "ver": "1ba9f87dcc01c24381a37c5656e5ce6abd3e6ff2",
               "Node name for S&R": "VideoAdaptiveAA"
             },
@@ -1930,7 +1930,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSXYZ-GenAI/comfyui-msxyz",
+              "aux_id": "MSYNTRIX/comfyui-msyntrix",
               "ver": "1ba9f87dcc01c24381a37c5656e5ce6abd3e6ff2",
               "Node name for S&R": "VideoTAADLAA"
             },
@@ -1980,7 +1980,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSXYZ-GenAI/comfyui-msxyz",
+              "aux_id": "MSYNTRIX/comfyui-msyntrix",
               "ver": "1ba9f87dcc01c24381a37c5656e5ce6abd3e6ff2",
               "Node name for S&R": "VideoTAADLAA"
             },

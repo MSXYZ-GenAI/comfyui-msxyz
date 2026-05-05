@@ -1,5 +1,5 @@
 # Video TAA + DLAA utilities
-# MSXYZ
+# MSYNTRIX
 
 
 import torch

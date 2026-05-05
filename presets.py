@@ -1,5 +1,5 @@
 # Video TAA + DLAA presets
-# MSXYZ
+# MSYNTRIX
 
 
 def frame_preset(

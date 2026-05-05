@@ -465,10 +465,10 @@
         }
       ],
       "properties": {
-        "cnr_id": "comfyui-msxyz",
+        "cnr_id": "comfyui-msyntrix",
         "ver": "24d3f18e4a6ff2d5060c7e0fbd59df33baeb29d5",
         "Node name for S&R": "VideoTAADLAA",
-        "aux_id": "MSXYZ-GenAI/comfyui-msxyz"
+        "aux_id": "MSYNTRIX/comfyui-msyntrix"
       },
       "widgets_values": [
         "Detail",

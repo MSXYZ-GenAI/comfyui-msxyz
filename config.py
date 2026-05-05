@@ -1,5 +1,5 @@
 # Video TAA + DLAA node defaults
-# MSXYZ
+# MSYNTRIX
 
 
 # Internal tuning values from visual tests.

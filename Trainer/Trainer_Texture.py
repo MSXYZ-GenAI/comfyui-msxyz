@@ -1,5 +1,5 @@
 # DLAATexture Model Trainer
-# Trains the 1x texture refinement model used by comfyui-msxyz.
+# Trains the 1x texture refinement model used by comfyui-msyntrix.
 # Exports DLAATexture.pth and DLAATexture.safetensors.
 
 

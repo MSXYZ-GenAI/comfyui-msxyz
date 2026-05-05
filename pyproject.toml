@@ -1,13 +1,13 @@
 [project]
-name = "comfyui-msxyz"
+name = "comfyui-msyntrix"
 description = "ComfyUI Video Anti-Aliasing Pack"
 version = "0.2.0"
 license = { file = "LICENSE" }
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/MSXYZ-GenAI/comfyui-msxyz"
+Repository = "https://github.com/MSYNTRIX/comfyui-msyntrix"
 
 [tool.comfy]
-PublisherId = "msxyz"
-DisplayName = "comfyui-msxyz"
+PublisherId = "msyntrix"
+DisplayName = "comfyui-msyntrix"

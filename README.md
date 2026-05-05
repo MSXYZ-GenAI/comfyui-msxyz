@@ -1,9 +1,9 @@
 # ComfyUI Video Anti-Aliasing Pack
 <p align="center">
   <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=flat-square&logo=github" alt="Manager">
-  <img src="https://img.shields.io/github/v/release/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=orange" alt="Release">
+  <img src="https://img.shields.io/github/v/release/MSYNTRIX/comfyui-msxyz?style=flat-square&color=orange" alt="Release">
   <img src="https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python" alt="Python">
-  <img src="https://img.shields.io/github/stars/MSXYZ-GenAI/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
+  <img src="https://img.shields.io/github/stars/MSYNTRIX/comfyui-msxyz?style=flat-square&color=gold" alt="Stars">
 </p>
 
 Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines temporal anti-aliasing, jittered sampling, and DLAA-inspired refinement for cleaner, more stable edges. VideoAdaptiveAA provides a lightweight edge-focused cleanup pass for aliasing-prone regions.
@@ -19,7 +19,7 @@ Anti-aliasing nodes for ComfyUI image and video workflows. VideoTAADLAA combines
 ## Preview
 | TAA + DLAA Anti-Aliasing | Adaptive Anti-Aliasing |
 | :---: | :---: |
-| <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/assets/video_taadlaa.png" width="100%"> | <img src="https://github.com/MSXYZ-GenAI/comfyui-msxyz/blob/main/assets/video_adaptive_aa.png" width="100%"> |
+| <img src="https://github.com/MSYNTRIX/comfyui-msxyz/blob/main/assets/video_taadlaa.png" width="100%"> | <img src="https://github.com/MSYNTRIX/comfyui-msxyz/blob/main/assets/video_adaptive_aa.png" width="100%"> |
 
 ---
 
