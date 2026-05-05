@@ -1,5 +1,5 @@
 # DLAANet Model Trainer
-# Trains the 1x DLAA refinement model used by comfyui-msyntrix.
+# Trains the 1x DLAA refinement model used by comfyui-solricks.
 # Exports DLAANet.pth and DLAANet.safetensors.
 
 

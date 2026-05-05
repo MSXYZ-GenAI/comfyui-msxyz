@@ -1,5 +1,5 @@
 # Video TAA + DLAA presets
-# MSYNTRIX
+# SOLRICKS
 
 
 def frame_preset(

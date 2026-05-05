@@ -1,5 +1,5 @@
 # Video TAA + DLAA model
-# MSYNTRIX
+# SOLRICKS
 
 
 import torch

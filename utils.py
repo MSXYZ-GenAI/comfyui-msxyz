@@ -1,5 +1,5 @@
 # Video TAA + DLAA utilities
-# MSYNTRIX
+# SOLRICKS
 
 
 import torch

@@ -15,7 +15,7 @@ try:
     NODE_DISPLAY_NAME_MAPPINGS.update(AA_NAMES)
 
 except Exception as e:
-    print(f"[MSYNTRIX] VideoAdaptiveAA failed to load, skipped: {type(e).__name__}: {e}")
+    print(f"[SOLRICKS] VideoAdaptiveAA failed to load, skipped: {type(e).__name__}: {e}")
 
 
 try:
@@ -29,7 +29,7 @@ try:
 
 
 except Exception as e:
-    print(f"[MSYNTRIX] VideoTAADLAA failed to load: {type(e).__name__}: {e}")
+    print(f"[SOLRICKS] VideoTAADLAA failed to load: {type(e).__name__}: {e}")
 
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

@@ -1,6 +1,6 @@
 # Video TAA + DLAA Inference
 # v0.2.0
-# MSYNTRIX
+# SOLRICKS
 # AI-assisted
 
 

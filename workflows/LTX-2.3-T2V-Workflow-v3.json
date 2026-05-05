@@ -31,7 +31,7 @@
         }
       },
       "widgets_values": [
-        "## 🛠 Created by: MSYNTRIX\n\n## Model links (for local users)\n\n**checkpoints**\n- [ltx-2-19b-dev.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev.safetensors)\n- [ltx-2-19b-dev-fp8.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev-fp8.safetensors)\n\n**text_encoders**\n\n- [gemma_3_12B_it.safetensors](https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it.safetensors)\n\n**loras**\n\n- [ltx-2-19b-distilled-lora-384.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors)\n- [ltx-2-19b-ic-lora-union-control-ref0.5.safetensors](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Union-Control/blob/main/ltx-2-19b-ic-lora-union-control-ref0.5.safetensors)\n\n**latent_upscale_models**\n\n- [ltx-2-spatial-upscaler-x2-1.0.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors)\n\n\nModel Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 checkpoints/\n│   │      ├── ltx-2-19b-dev.safetensors\n│   │      └── ltx-2-19b-dev-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │      └── gemma_3_12B_it.safetensors\n│   ├── 📂 loras/\n│   │      ├── ltx-2-19b-distilled-lora-384.safetensors\n│   │      └── ltx-2-19b-ic-lora-union-control-ref0.5.safetensors\n│   └── 📂 latent_upscale_models/\n│          └── ltx-2-spatial-upscaler-x2-1.0.safetensors\n```\n\n\n"
+        "## 🛠 Created by: SOLRICKS\n\n## Model links (for local users)\n\n**checkpoints**\n- [ltx-2-19b-dev.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev.safetensors)\n- [ltx-2-19b-dev-fp8.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-dev-fp8.safetensors)\n\n**text_encoders**\n\n- [gemma_3_12B_it.safetensors](https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it.safetensors)\n\n**loras**\n\n- [ltx-2-19b-distilled-lora-384.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors)\n- [ltx-2-19b-ic-lora-union-control-ref0.5.safetensors](https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Union-Control/blob/main/ltx-2-19b-ic-lora-union-control-ref0.5.safetensors)\n\n**latent_upscale_models**\n\n- [ltx-2-spatial-upscaler-x2-1.0.safetensors](https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors)\n\n\nModel Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 checkpoints/\n│   │      ├── ltx-2-19b-dev.safetensors\n│   │      └── ltx-2-19b-dev-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │      └── gemma_3_12B_it.safetensors\n│   ├── 📂 loras/\n│   │      ├── ltx-2-19b-distilled-lora-384.safetensors\n│   │      └── ltx-2-19b-ic-lora-union-control-ref0.5.safetensors\n│   └── 📂 latent_upscale_models/\n│          └── ltx-2-spatial-upscaler-x2-1.0.safetensors\n```\n\n\n"
       ],
       "color": "#323",
       "bgcolor": "#535"
@@ -3476,7 +3476,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSYNTRIX/comfyui-msyntrix",
+              "aux_id": "SOLRICKS/comfyui-solricks",
               "ver": "b9b5700392c8ffe6650b269eca497ab14e76ba3d",
               "Node name for S&R": "VideoTAADLAA"
             },
@@ -3571,7 +3571,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSYNTRIX/comfyui-msyntrix",
+              "aux_id": "SOLRICKS/comfyui-solricks",
               "ver": "0d9d93c8d39a19db27d2c0fcb973517b53deac6f",
               "Node name for S&R": "VideoAdaptiveAA"
             },
@@ -3616,7 +3616,7 @@
               }
             ],
             "properties": {
-              "aux_id": "MSYNTRIX/comfyui-msyntrix",
+              "aux_id": "SOLRICKS/comfyui-solricks",
               "ver": "0d9d93c8d39a19db27d2c0fcb973517b53deac6f",
               "Node name for S&R": "VideoTAADLAA"
             },

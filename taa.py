@@ -1,5 +1,5 @@
 # Video TAA + DLAA temporal state
-# MSYNTRIX
+# SOLRICKS
 
 
 import torch

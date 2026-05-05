@@ -1,6 +1,6 @@
 # Video Adaptive Anti-aliasing
 # v0.1.0
-# MSYNTRIX
+# SOLRICKS
 # AI-assisted
 
 

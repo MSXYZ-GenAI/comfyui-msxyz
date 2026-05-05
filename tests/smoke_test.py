@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def load_package_init():
-    package_name = "comfyui_msxyz_smoke"
+    package_name = "comfyui_solricks_smoke"
 
     spec = importlib.util.spec_from_file_location(
         package_name,
