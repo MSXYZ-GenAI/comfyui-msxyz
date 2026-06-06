@@ -3,7 +3,6 @@
   <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=flat-square&logo=github" alt="Manager">
   <img src="https://img.shields.io/github/v/release/SOLRICKS/comfyui-solricks?style=flat-square&color=orange" alt="Release">
   <img src="https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python" alt="Python">
-  <img src="https://img.shields.io/github/stars/SOLRICKS/comfyui-solricks?style=flat-square&color=gold" alt="Stars">
   <img src="https://img.shields.io/github/stars/solricks/comfyui-solricks.svg?style=flat-square&label=Stars&color=yellow&logo=github" alt="GitHub stars">
 </p>
 
