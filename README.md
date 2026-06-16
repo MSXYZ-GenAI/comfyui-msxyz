@@ -1,9 +1,9 @@
 # ComfyUI Video Anti-Aliasing Pack
 <p align="center">
   <img src="https://img.shields.io/badge/ComfyUI--Manager-Verified-green?style=flat-square&logo=github" alt="ComfyUI Manager Verified">
-  <img src="https://img.shields.io/github/v/release/SOLRICKS/comfyui-solricks?style=flat-square&color=orange&cacheSeconds=3600&v=4" alt="Release">
+  <img src="https://img.shields.io/github/v/release/SOLRICKS/comfyui-solricks?style=flat-square&color=orange&cacheSeconds=3600&v=5" alt="Release">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python" alt="Python 3.10+">
-  <img src="https://img.shields.io/github/stars/SOLRICKS/comfyui-solricks?style=flat-square&label=Stars&color=yellow&logo=github&cacheSeconds=3600&v=3" alt="GitHub stars">
+  <img src="https://img.shields.io/github/stars/SOLRICKS/comfyui-solricks?style=flat-square&label=Stars&color=yellow&logo=github&cacheSeconds=3600&v=5" alt="GitHub stars">
 </p>
 
 > Available in **ComfyUI Manager**. Search for **SOLRICKS**.
