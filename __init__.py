@@ -45,4 +45,17 @@ except Exception as e:
     print(f"[SOLRICKS] VideoDetailRefiner failed to load: {type(e).__name__}: {e}")
 
 
+try:
+    from .VideoCinematicFX import (
+        NODE_CLASS_MAPPINGS as CINEMATIC_FX_MAPPINGS,
+        NODE_DISPLAY_NAME_MAPPINGS as CINEMATIC_FX_NAMES,
+    )
+
+    NODE_CLASS_MAPPINGS.update(CINEMATIC_FX_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(CINEMATIC_FX_NAMES)
+
+except Exception as e:
+    print(f"[SOLRICKS] VideoCinematicFX failed to load: {type(e).__name__}: {e}")
+
+
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
