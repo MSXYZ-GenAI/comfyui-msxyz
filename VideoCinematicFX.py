@@ -1,5 +1,5 @@
 # Video Cinematic FX
-# v0.1.0
+# v0.2.1
 # SOLRICKS
 
 
@@ -313,7 +313,7 @@ class VideoCinematicFX:
             pivot = 0.50
             out = (out - pivot) * (1.0 + contrast) + pivot
 
-        # Soft filmic highlight rolloff. Keeps bright areas from looking clipped after contrast.
+        # Soft filmic highlight rolloff
         luma = self._rgb_luma(out.clamp(0.0, 1.0))
         highlight_mask = torch.sigmoid((luma - 0.74) * 10.0)
         filmic = out / (out + 0.28)
@@ -406,7 +406,7 @@ class VideoCinematicFX:
                 torch.linspace(-1.0, 1.0, w, device=device, dtype=dtype),
                 indexing="ij",
             )
-            # Slightly oval vignette looks more cinematic for widescreen and vertical content.
+            # Vignette looks more cinematic for vertical content
             dist = torch.sqrt((xx * 0.92) ** 2 + (yy * 1.08) ** 2)
             mask = ((dist - 0.26) / 0.86).clamp(0.0, 1.0)
             mask = mask * mask * (3.0 - 2.0 * mask)
@@ -470,7 +470,7 @@ class VideoCinematicFX:
 
         shifted = torch.cat((red, green, blue), dim=1)
 
-        # Keep the center cleaner and push the effect toward the edges.
+        # Keep the center cleaner
         edge_mask = self._vignette_mask(h, w, image.device, image.dtype).clamp(0.0, 1.0)
         blend = (edge_mask * min(amount, 1.0) * 0.75).clamp(0.0, 1.0)
         return torch.lerp(image, shifted, blend).clamp(0.0, 1.0)
@@ -503,7 +503,7 @@ class VideoCinematicFX:
         shadow_bias = (1.0 - luma).clamp(0.0, 1.0) * 0.55 + 0.45
         grain = noise * amount * shadow_bias
 
-        # Mostly luma grain, with a very small color separation for film feel.
+        # Mostly luma grain
         chroma = torch.cat((grain * 0.20, -grain * 0.08, grain * 0.10), dim=1)
         return (image + grain + chroma).clamp(0.0, 1.0)
 
